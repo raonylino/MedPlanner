@@ -1,14 +1,15 @@
+import 'package:circle_nav_bar/circle_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:circle_nav_bar/circle_nav_bar.dart';
+
 import 'core/database/app_database.dart';
 import 'core/theme/app_theme.dart';
-import 'features/finance_view_model.dart';
-import 'features/dashboard/dashboard_page.dart';
-import 'features/planning/planning_page.dart';
-import 'features/income/income_page.dart';
 import 'features/cards/cards_page.dart';
+import 'features/dashboard/dashboard_page.dart';
+import 'features/finance_view_model.dart';
 import 'features/goals/goals_page.dart';
+import 'features/income/income_page.dart';
+import 'features/planning/planning_page.dart';
 import 'features/settings/settings_page.dart';
 
 void main() => runApp(const FinanceApp());
@@ -83,12 +84,12 @@ class FinanceShell extends StatefulWidget {
 }
 
 class _FinanceShellState extends State<FinanceShell> {
-  int selected = 0;
+  int selected = 2;
   bool _tourCheckStarted = false;
   static const titles = [
-    'Visão geral',
     'Planejamento',
     'Recebimentos',
+    'Visão geral',
     'Cartões',
     'Metas',
   ];
@@ -200,9 +201,9 @@ class _FinanceShellState extends State<FinanceShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      DashboardPage(vm: widget.vm),
-      PlanningPage(vm: widget.vm),
       IncomePage(vm: widget.vm),
+      PlanningPage(vm: widget.vm),
+      DashboardPage(vm: widget.vm),
       CardsPage(vm: widget.vm),
       GoalsPage(vm: widget.vm),
     ];
@@ -228,20 +229,20 @@ class _FinanceShellState extends State<FinanceShell> {
         activeIndex: selected,
         onTap: (index) => setState(() => selected = index),
         activeIcons: const [
-          Icon(Icons.space_dashboard, color: AppTheme.bg),
-          Icon(Icons.event_note, color: AppTheme.bg),
           Icon(Icons.south_west, color: AppTheme.bg),
+          Icon(Icons.event_note, color: AppTheme.bg),
+          Icon(Icons.space_dashboard, color: AppTheme.bg),
           Icon(Icons.credit_card, color: AppTheme.bg),
           Icon(Icons.flag, color: AppTheme.bg),
         ],
         inactiveIcons: const [
-          Icon(Icons.space_dashboard_outlined, color: AppTheme.muted),
-          Icon(Icons.event_note_outlined, color: AppTheme.muted),
           Icon(Icons.south_west, color: AppTheme.muted),
+          Icon(Icons.event_note_outlined, color: AppTheme.muted),
+          Icon(Icons.space_dashboard_outlined, color: AppTheme.muted),
           Icon(Icons.credit_card_outlined, color: AppTheme.muted),
           Icon(Icons.flag_outlined, color: AppTheme.muted),
         ],
-        levels: const ['Início', 'Planejar', 'Entradas', 'Cartões', 'Metas'],
+        levels: const ['Entradas', 'Planejar', 'Início', 'Cartões', 'Metas'],
         activeLevelsStyle: const TextStyle(
           color: AppTheme.lime,
           fontSize: 10,

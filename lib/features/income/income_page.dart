@@ -66,7 +66,7 @@ class _IncomePageState extends State<IncomePage> {
           key: 'quantity',
           label: 'Quantidade de plantões',
           initial: '${existing?['quantity'] ?? 1}',
-          keyboard: TextInputType.number,
+          keyboard: const TextInputType.numberWithOptions(decimal: true),
         ),
         SmartFieldSpec(
           key: 'tax',
@@ -106,13 +106,22 @@ class _IncomePageState extends State<IncomePage> {
         centsFrom(data['unit'].toString()) <= 0) {
       return;
     }
+    if (!context.mounted) return;
+    final quantity = double.tryParse(
+      data['quantity'].toString().trim().replaceAll(',', '.'),
+    );
+    if (quantity == null || !quantity.isFinite || quantity <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Informe uma quantidade de plantões maior que zero.'),
+        ),
+      );
+      return;
+    }
     final payload = {
       'service': data['service'].toString().trim(),
       'unitCents': centsFrom(data['unit'].toString()),
-      'quantity': (int.tryParse(data['quantity'].toString()) ?? 1).clamp(
-        1,
-        10000,
-      ),
+      'quantity': quantity,
       'date': DateTime.tryParse(data['date'].toString()) ?? DateTime.now(),
       'receiveMonth': data['receive_month'].toString(),
       'tax': data['tax'] as bool? ?? false,
@@ -121,7 +130,7 @@ class _IncomePageState extends State<IncomePage> {
     if (existing == null) {
       await vm.addIncome(
         service: payload['service'] as String,
-        quantity: payload['quantity'] as int,
+        quantity: payload['quantity'] as double,
         unitCents: payload['unitCents'] as int,
         date: payload['date'] as DateTime,
         receiveMonth: payload['receiveMonth'] as String,
@@ -132,7 +141,7 @@ class _IncomePageState extends State<IncomePage> {
       await vm.updateIncome(
         id: FinanceViewModel.integer(existing['id']),
         service: payload['service'] as String,
-        quantity: payload['quantity'] as int,
+        quantity: payload['quantity'] as double,
         unitCents: payload['unitCents'] as int,
         date: payload['date'] as DateTime,
         receiveMonth: payload['receiveMonth'] as String,
@@ -244,7 +253,10 @@ class _IncomePageState extends State<IncomePage> {
           final received = FinanceViewModel.integer(entry['received']) == 1;
           final value = vm.incomeValue(entry);
           final date = FinanceViewModel.string(entry['date']).split('T').first;
-          final qty = FinanceViewModel.integer(entry['quantity']);
+          final quantity = FinanceViewModel.decimal(entry['quantity']);
+          final quantityLabel = quantity == quantity.truncateToDouble()
+              ? quantity.toInt().toString()
+              : quantity.toString().replaceAll('.', ',');
           return Card(
             child: ListTile(
               leading: IconButton(
@@ -262,7 +274,7 @@ class _IncomePageState extends State<IncomePage> {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
-                '${dateLabel(date)} • $qty ${qty == 1 ? 'plantão' : 'plantões'}${FinanceViewModel.integer(entry['tax_applies']) == 1 ? ' • imposto aplicado' : ''}',
+                '${dateLabel(date)} • $quantityLabel ${quantity == 1 ? 'plantão' : 'plantões'}${FinanceViewModel.integer(entry['tax_applies']) == 1 ? ' • imposto aplicado' : ''}',
                 style: const TextStyle(color: AppTheme.muted),
               ),
               trailing: Row(

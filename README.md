@@ -17,20 +17,23 @@ O MedPlanner foi criado para ajudar no controle de finanças pessoais com foco e
 ### Dashboard e planejamento
 - Painel mensal com entradas líquidas projetadas, despesas e cartões
 - Seletor mensal em carrossel com meses anteriores e seguintes
-- Planejamento por categoria com subtotal, percentual do mês e marcação de pagamento
+- Planejamento por categoria com subtotal, percentual do mês, vencimento e marcação de pagamento
+- Repetição de despesas por uma quantidade definida de meses (até 120 ocorrências, incluindo a primeira)
+- Notificações às 9h no dia anterior e no dia do vencimento para despesas não pagas
 
 ### Receitas e recebimentos
 - Organização de recebimentos em abas como Trabalhados e Recebidos
 - Cadastro reutilizável de serviços
-- Edição de dados como data, quantidade, imposto estimado e mês previsto de recebimento
+- Edição de dados como data, quantidade de plantões (incluindo frações como 0,5), imposto estimado e mês previsto de recebimento
 
 ### Investimentos e cartões
 - Regras de investimento percentuais ou fixas
-- Gestão de cartões com limite, categorias e compras parceladas
+- Gestão de cartões com limite, categorias e compras parceladas agrupadas por cartão
+- Consulta das parcelas ao abrir cada cartão e edição de uma parcela ou da compra inteira
 - Cálculo de parcelas em aberto e liberação de limite após pagamento
 
 ### Metas e categorias
-- Metas agrupadas por categoria com descrição, quantidade e subtotal
+- Metas agrupadas por categoria com descrição, quantidade, subtotal e edição
 - Categorias separadas por área: Planejamento, Cartões e Metas
 - Criação rápida de novas categorias diretamente no seletor de cada módulo
 
@@ -43,6 +46,7 @@ O MedPlanner foi criado para ajudar no controle de finanças pessoais com foco e
 
 - Flutter
 - SQLite
+- Notificações locais
 - Excel
 - Share Plus
 - Circle Nav Bar
@@ -99,6 +103,7 @@ puro --env=stable flutter run
 - O aplicativo não faz chamadas de rede
 - Não há integração bancária
 - Os dados ficam armazenados localmente em SQLite no dispositivo
+- Os lembretes de vencimento são notificações locais; o sistema pode solicitar permissão para exibi-las
 - Backup JSON e exportação em planilha são feitos via compartilhamento do sistema
 - A restauração substitui os dados locais atuais
 

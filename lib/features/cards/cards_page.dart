@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_theme.dart';
 import '../../shared/ui.dart';
 import '../finance_view_model.dart';
@@ -77,8 +78,20 @@ class CardsPage extends StatelessWidget {
 
   Future<void> _editCardExpense(
     BuildContext context,
-    Map<String, Object?> expense,
-  ) async {
+    Map<String, Object?> expense, {
+    List<Map<String, Object?>>? purchase,
+  }) async {
+    final editPurchase = purchase != null;
+    final recurring = FinanceViewModel.integer(expense['recurring']) == 1;
+    final amountCents = editPurchase
+        ? recurring
+              ? FinanceViewModel.integer(expense['amount_cents'])
+              : purchase.fold(
+                  0,
+                  (sum, item) =>
+                      sum + FinanceViewModel.integer(item['amount_cents']),
+                )
+        : FinanceViewModel.integer(expense['amount_cents']);
     final options = vm
         .categoriesFor('cards')
         .map(
@@ -93,50 +106,74 @@ class CardsPage extends StatelessWidget {
         !options.any((option) => option.value == selectedCategory)) {
       options.add((value: selectedCategory, label: selectedCategory));
     }
-    final data = await showSmartForm(context, 'Editar parcela', [
-      SmartFieldSpec(
-        key: 'category',
-        label: 'Categoria',
-        initial: selectedCategory,
-        kind: SmartFieldKind.dropdown,
-        options: options,
-        onCreateOption: (dialogContext) => createCategoryOption(
-          dialogContext,
-          (name) => vm.addCategory(name, 'cards'),
+    final data = await showSmartForm(
+      context,
+      editPurchase ? 'Editar compra inteira' : 'Editar parcela',
+      [
+        SmartFieldSpec(
+          key: 'category',
+          label: 'Categoria',
+          initial: selectedCategory,
+          kind: SmartFieldKind.dropdown,
+          options: options,
+          onCreateOption: (dialogContext) => createCategoryOption(
+            dialogContext,
+            (name) => vm.addCategory(name, 'cards'),
+          ),
+          onDeleteOption: (dialogContext, name) => deleteCategoryOption(
+            dialogContext,
+            name,
+            vm.categoriesFor('cards'),
+            vm.deleteCategory,
+          ),
         ),
-        onDeleteOption: (dialogContext, name) => deleteCategoryOption(
-          dialogContext,
-          name,
-          vm.categoriesFor('cards'),
-          vm.deleteCategory,
+        SmartFieldSpec(
+          key: 'title',
+          label: 'Descrição da compra',
+          initial: FinanceViewModel.string(expense['title']),
         ),
-      ),
-      SmartFieldSpec(
-        key: 'title',
-        label: 'Descrição da compra',
-        initial: FinanceViewModel.string(expense['title']),
-      ),
-      SmartFieldSpec(
-        key: 'amount',
-        label: 'Valor desta parcela (R\$)',
-        initial: (FinanceViewModel.integer(expense['amount_cents']) / 100)
-            .toStringAsFixed(2)
-            .replaceAll('.', ','),
-        keyboard: TextInputType.number,
-      ),
-    ]);
+        SmartFieldSpec(
+          key: 'amount',
+          label: editPurchase && !recurring
+              ? 'Novo valor total da compra (R\$)'
+              : editPurchase
+              ? 'Valor mensal (R\$)'
+              : 'Valor desta parcela (R\$)',
+          initial: (amountCents / 100).toStringAsFixed(2).replaceAll('.', ','),
+          keyboard: TextInputType.number,
+        ),
+      ],
+    );
     if (data == null ||
         data['category'] == null ||
         data['title'].toString().trim().isEmpty ||
         centsFrom(data['amount'].toString()) <= 0) {
       return;
     }
-    await vm.updateCardExpense(
-      id: FinanceViewModel.integer(expense['id']),
-      title: data['title'].toString().trim(),
-      category: data['category'].toString(),
-      amountCents: centsFrom(data['amount'].toString()),
-    );
+    if (editPurchase &&
+        purchase.length == 1 &&
+        FinanceViewModel.string(expense['purchase_id']).isEmpty) {
+      await vm.updateCardExpense(
+        id: FinanceViewModel.integer(expense['id']),
+        title: data['title'].toString().trim(),
+        category: data['category'].toString(),
+        amountCents: centsFrom(data['amount'].toString()),
+      );
+    } else if (editPurchase) {
+      await vm.updateCardPurchase(
+        purchaseId: FinanceViewModel.string(expense['purchase_id']),
+        title: data['title'].toString().trim(),
+        category: data['category'].toString(),
+        totalCents: centsFrom(data['amount'].toString()),
+      );
+    } else {
+      await vm.updateCardExpense(
+        id: FinanceViewModel.integer(expense['id']),
+        title: data['title'].toString().trim(),
+        category: data['category'].toString(),
+        amountCents: centsFrom(data['amount'].toString()),
+      );
+    }
   }
 
   Future<void> _deleteCardExpense(
@@ -150,6 +187,27 @@ class CardsPage extends StatelessWidget {
     );
     if (!deleted || !context.mounted) return;
     await vm.delete('card_expenses', FinanceViewModel.integer(expense['id']));
+  }
+
+  Future<void> _deleteCardPurchase(
+    BuildContext context,
+    String purchaseId, {
+    Map<String, Object?>? singleExpense,
+  }) async {
+    final deleted = await confirmDeleteRecord(
+      context,
+      title: 'Apagar compra inteira?',
+      message: 'Todas as parcelas e previsões desta compra serão removidas.',
+    );
+    if (!deleted || !context.mounted) return;
+    if (purchaseId.isEmpty && singleExpense != null) {
+      await vm.delete(
+        'card_expenses',
+        FinanceViewModel.integer(singleExpense['id']),
+      );
+    } else {
+      await vm.deleteCardPurchase(purchaseId);
+    }
   }
 
   Future<void> _addExpense(BuildContext context) async {
@@ -244,21 +302,12 @@ class CardsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final monthItems = vm.cardExpenses
-        .where((e) => e['month'] == vm.month)
-        .toList();
-    final grouped = <String, List<Map<String, Object?>>>{};
-    for (final item in monthItems) {
-      grouped
-          .putIfAbsent(FinanceViewModel.string(item['category']), () => [])
-          .add(item);
-    }
     return ListView(
       padding: const EdgeInsets.only(bottom: 28),
       children: [
         const PageHeading(
           'Cartões',
-          subtitle: 'Veja a fatura mensal e o limite de crédito disponível.',
+          subtitle: 'Toque em um cartão para ver as compras e parcelas dele.',
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -303,69 +352,85 @@ class CardsPage extends StatelessWidget {
           final limit = FinanceViewModel.integer(card['limit_cents']);
           final outstanding = vm.cardOutstanding(id);
           final available = (limit - outstanding).clamp(0, limit);
+          final cardExpenses =
+              vm.cardExpenses
+                  .where(
+                    (expense) =>
+                        FinanceViewModel.integer(expense['card_id']) == id,
+                  )
+                  .toList()
+                ..sort(
+                  (a, b) => FinanceViewModel.string(
+                    a['month'],
+                  ).compareTo(FinanceViewModel.string(b['month'])),
+                );
+          final purchases = <String, List<Map<String, Object?>>>{};
+          for (final expense in cardExpenses) {
+            final purchaseId = FinanceViewModel.string(expense['purchase_id']);
+            final key = purchaseId.isEmpty
+                ? 'unlinked-${expense['id']}'
+                : purchaseId;
+            purchases.putIfAbsent(key, () => []).add(expense);
+          }
+          final monthPurchases = <String, List<Map<String, Object?>>>{};
+          for (final entry in purchases.entries) {
+            final installments = entry.value
+                .where(
+                  (expense) =>
+                      FinanceViewModel.string(expense['month']) == vm.month,
+                )
+                .toList();
+            if (installments.isNotEmpty) {
+              monthPurchases[entry.key] = installments;
+            }
+          }
+          final categories = <String, List<String>>{};
+          for (final entry in monthPurchases.entries) {
+            final name = FinanceViewModel.string(
+              purchases[entry.key]!.first['category'],
+            );
+            final category = name.isEmpty ? 'Outros' : name;
+            categories.putIfAbsent(category, () => []).add(entry.key);
+          }
           return Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
             child: Container(
-              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppTheme.surface,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: ExpansionTile(
+                leading: const Icon(Icons.credit_card, color: AppTheme.lime),
+                title: Text(
+                  FinanceViewModel.string(card['name']),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  'Disponível ${money(available)} • Limite ${money(limit)}',
+                  style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PopupMenuButton<String>(
+                      tooltip: 'Ações do cartão',
+                      onSelected: (action) {
+                        if (action == 'edit') {
+                          _editCard(context, card);
+                        } else if (action == 'delete') {
+                          _deleteCard(context, card);
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Editar')),
+                        PopupMenuItem(value: 'delete', child: Text('Apagar')),
+                      ],
+                    ),
+                    const Icon(Icons.expand_more, color: AppTheme.muted),
+                  ],
+                ),
+                childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.credit_card, color: AppTheme.lime),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          FinanceViewModel.string(card['name']),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      Text(
-                        'Limite ${money(limit)}',
-                        style: const TextStyle(
-                          color: AppTheme.muted,
-                          fontSize: 12,
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        tooltip: 'Ações do cartão',
-                        onSelected: (action) {
-                          if (action == 'edit') {
-                            _editCard(context, card);
-                          } else if (action == 'delete') {
-                            _deleteCard(context, card);
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'edit', child: Text('Editar')),
-                          PopupMenuItem(value: 'delete', child: Text('Apagar')),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Disponível',
-                          style: const TextStyle(color: AppTheme.muted),
-                        ),
-                      ),
-                      Text(
-                        money(available),
-                        style: const TextStyle(
-                          color: AppTheme.lime,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
                   LinearProgressIndicator(
                     value: limit == 0
                         ? 0
@@ -373,124 +438,38 @@ class CardsPage extends StatelessWidget {
                     color: AppTheme.lime,
                     backgroundColor: AppTheme.surface2,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${money(outstanding)} comprometidos em parcelas ainda não pagas',
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 10),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${money(outstanding)} comprometidos em parcelas ainda não pagas',
+                        style: const TextStyle(
+                          color: AppTheme.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (monthPurchases.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Não há parcelas deste cartão nesta fatura.',
+                        style: TextStyle(color: AppTheme.muted),
+                      ),
+                    ),
+                  ...categories.entries.map(
+                    (category) => _categorySection(
+                      context,
+                      category.key,
+                      category.value,
+                      purchases,
+                      monthPurchases,
+                    ),
                   ),
                 ],
               ),
-            ),
-          );
-        }),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 12, 20, 6),
-          child: Text(
-            'Fatura por categoria',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ),
-        if (grouped.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Text(
-              'Sem compras previstas neste mês.',
-              style: TextStyle(color: AppTheme.muted),
-            ),
-          ),
-        ...grouped.entries.map((group) {
-          final subtotal = group.value.fold(
-            0,
-            (sum, e) => sum + FinanceViewModel.integer(e['amount_cents']),
-          );
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 6, 20, 2),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface2,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          group.key,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      Text(
-                        money(subtotal),
-                        style: const TextStyle(
-                          color: AppTheme.lime,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ...group.value.map((entry) {
-                  final id = FinanceViewModel.integer(entry['id']);
-                  final paid = FinanceViewModel.integer(entry['paid']) == 1;
-                  final recurring =
-                      FinanceViewModel.integer(entry['recurring']) == 1;
-                  final description = recurring
-                      ? 'Assinatura • ${monthLabel(vm.month)}'
-                      : 'Parcela ${entry['installment_index']} de ${entry['installment_count']} • ${monthLabel(vm.month)}';
-                  return Card(
-                    child: CheckboxListTile(
-                      value: paid,
-                      onChanged: (value) =>
-                          vm.setCardInstallmentPaid(id, value ?? false),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(FinanceViewModel.string(entry['title'])),
-                      subtitle: Text(
-                        paid ? 'Pago • $description' : description,
-                        style: const TextStyle(color: AppTheme.muted),
-                      ),
-                      secondary: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            money(
-                              FinanceViewModel.integer(entry['amount_cents']),
-                            ),
-                            style: const TextStyle(
-                              color: AppTheme.lime,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          PopupMenuButton<String>(
-                            tooltip: 'Ações da parcela',
-                            onSelected: (action) {
-                              if (action == 'edit') {
-                                _editCardExpense(context, entry);
-                              } else if (action == 'delete') {
-                                _deleteCardExpense(context, entry);
-                              }
-                            },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: 'edit',
-                                child: Text('Editar parcela'),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Apagar parcela'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              ],
             ),
           );
         }),
@@ -513,6 +492,223 @@ class CardsPage extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  Widget _categorySection(
+    BuildContext context,
+    String category,
+    List<String> purchaseKeys,
+    Map<String, List<Map<String, Object?>>> purchases,
+    Map<String, List<Map<String, Object?>>> monthPurchases,
+  ) {
+    final total = purchaseKeys.fold<int>(0, (sum, key) =>
+        sum + monthPurchases[key]!.fold<int>(
+          0,
+          (subtotal, installment) =>
+              subtotal + FinanceViewModel.integer(installment['amount_cents']),
+        ));
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            title: Text(category, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(
+              '${purchaseKeys.length} ${purchaseKeys.length == 1 ? 'compra' : 'compras'} nesta fatura',
+              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            ),
+            trailing: Text(
+              money(total),
+              style: const TextStyle(color: AppTheme.lime, fontWeight: FontWeight.bold),
+            ),
+          ),
+          for (final key in purchaseKeys)
+            _purchaseSection(
+              context,
+              purchases[key]!,
+              monthPurchases[key]!,
+              key.startsWith('unlinked-') ? '' : key,
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _purchaseSection(
+    BuildContext context,
+    List<Map<String, Object?>> purchase,
+    List<Map<String, Object?>> visibleInstallments,
+    String purchaseId,
+  ) {
+    final first = purchase.first;
+    final recurring = FinanceViewModel.integer(first['recurring']) == 1;
+    final total = visibleInstallments.fold(
+      0,
+      (sum, item) => sum + FinanceViewModel.integer(item['amount_cents']),
+    );
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            title: Text(
+              FinanceViewModel.string(first['title']),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              '${FinanceViewModel.string(first['category'])} • ${recurring ? 'Assinatura' : '${purchase.length} parcelas'}',
+              style: const TextStyle(color: AppTheme.muted),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  money(
+                    recurring
+                        ? FinanceViewModel.integer(first['amount_cents'])
+                        : total,
+                  ),
+                  style: const TextStyle(
+                    color: AppTheme.lime,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Ações da compra',
+                  onSelected: (action) {
+                    if (action == 'edit') {
+                      _editCardExpense(context, first, purchase: purchase);
+                    } else if (action == 'delete') {
+                      _deleteCardPurchase(
+                        context,
+                        purchaseId,
+                        singleExpense: purchase.length == 1 ? first : null,
+                      );
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Text('Editar todas as parcelas'),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Apagar compra inteira'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          for (final installment in visibleInstallments)
+            _installmentTile(context, installment),
+        ],
+      ),
+    );
+  }
+
+  Widget _installmentTile(
+    BuildContext context,
+    Map<String, Object?> installment,
+  ) {
+    final id = FinanceViewModel.integer(installment['id']);
+    final purchaseId = FinanceViewModel.string(installment['purchase_id']);
+    final purchase = _installmentsFor(installment);
+    final paid = FinanceViewModel.integer(installment['paid']) == 1;
+    final recurring = FinanceViewModel.integer(installment['recurring']) == 1;
+    final description = recurring
+        ? 'Assinatura • ${monthLabel(FinanceViewModel.string(installment['month']))}'
+        : 'Parcela ${installment['installment_index']} de ${installment['installment_count']} • ${monthLabel(FinanceViewModel.string(installment['month']))}';
+    return ListTile(
+      dense: true,
+      leading: Checkbox(
+        value: paid,
+        onChanged: (value) => vm.setCardInstallmentPaid(id, value ?? false),
+      ),
+      title: Text(description, style: const TextStyle(fontSize: 13)),
+      subtitle: Text(
+        paid ? 'Pago' : 'Em aberto',
+        style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            money(FinanceViewModel.integer(installment['amount_cents'])),
+            style: const TextStyle(
+              color: AppTheme.lime,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Ações da parcela',
+            onSelected: (action) {
+              if (action == 'edit') {
+                _editCardExpense(context, installment);
+              } else if (action == 'edit-all') {
+                _editCardExpense(context, installment, purchase: purchase);
+              } else if (action == 'delete') {
+                _deleteCardExpense(context, installment);
+              } else if (action == 'delete-all') {
+                _deleteCardPurchase(
+                  context,
+                  purchaseId,
+                  singleExpense: purchase.length == 1 ? installment : null,
+                );
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'edit',
+                child: Text('Editar somente esta parcela'),
+              ),
+              if (purchase.length > 1)
+                const PopupMenuItem(
+                  value: 'edit-all',
+                  child: Text('Editar todas as parcelas'),
+                ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Text('Apagar somente esta parcela'),
+              ),
+              if (purchase.length > 1)
+                const PopupMenuItem(
+                  value: 'delete-all',
+                  child: Text('Apagar todas as parcelas'),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, Object?>> _installmentsFor(
+    Map<String, Object?> installment,
+  ) {
+    final purchaseId = FinanceViewModel.string(installment['purchase_id']);
+    if (purchaseId.isEmpty) return [installment];
+    return vm.cardExpenses
+        .where(
+          (item) => FinanceViewModel.string(item['purchase_id']) == purchaseId,
+        )
+        .toList()
+      ..sort(
+        (a, b) => FinanceViewModel.integer(
+          a['installment_index'],
+        ).compareTo(FinanceViewModel.integer(b['installment_index'])),
+      );
   }
 
   Widget _monthPicker() {

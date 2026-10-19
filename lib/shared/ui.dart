@@ -75,11 +75,12 @@ class RecordTile extends StatelessWidget {
     required this.subtitle,
     required this.trailing,
     this.onTap,
+    this.onEdit,
     this.onDelete,
     super.key,
   });
   final String title, subtitle, trailing;
-  final VoidCallback? onTap, onDelete;
+  final VoidCallback? onTap, onEdit, onDelete;
   @override
   Widget build(BuildContext context) => Card(
     child: ListTile(
@@ -96,7 +97,25 @@ class RecordTile extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          if (onDelete != null)
+          if (onEdit != null && onDelete != null)
+            PopupMenuButton<String>(
+              tooltip: 'Ações',
+              onSelected: (action) {
+                if (action == 'edit') onEdit!();
+                if (action == 'delete') onDelete!();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'edit', child: Text('Editar')),
+                PopupMenuItem(value: 'delete', child: Text('Apagar')),
+              ],
+            )
+          else if (onEdit != null)
+            IconButton(
+              tooltip: 'Editar',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined, color: AppTheme.muted),
+            )
+          else if (onDelete != null)
             IconButton(
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline, color: AppTheme.muted),
@@ -114,7 +133,7 @@ typedef FieldSpec = ({
   TextInputType keyboard,
 });
 
-enum SmartFieldKind { text, dropdown, multiSelect, toggle, date }
+enum SmartFieldKind { text, dropdown, multiSelect, toggle, date, optionalDate }
 
 typedef SelectOption = ({String value, String label});
 
@@ -126,6 +145,8 @@ class SmartFieldSpec {
     this.keyboard = TextInputType.text,
     this.kind = SmartFieldKind.text,
     this.options = const [],
+    this.firstDate,
+    this.lastDate,
     this.onCreateOption,
     this.onDeleteOption,
   });
@@ -135,6 +156,8 @@ class SmartFieldSpec {
   final TextInputType keyboard;
   final SmartFieldKind kind;
   final List<SelectOption> options;
+  final DateTime? firstDate;
+  final DateTime? lastDate;
   final Future<String?> Function(BuildContext context)? onCreateOption;
   final Future<bool> Function(BuildContext context, String value)?
   onDeleteOption;
@@ -768,9 +791,16 @@ Future<Map<String, Object?>?> showSmartForm(
                         setDialogState(() => values[field.key] = value),
                   );
                 case SmartFieldKind.date:
-                  final date =
+                  final requestedDate =
                       DateTime.tryParse(values[field.key]?.toString() ?? '') ??
                       DateTime.now();
+                  final firstDate = field.firstDate ?? DateTime(2000);
+                  final lastDate = field.lastDate ?? DateTime(2100);
+                  final date = requestedDate.isBefore(firstDate)
+                      ? firstDate
+                      : requestedDate.isAfter(lastDate)
+                      ? lastDate
+                      : requestedDate;
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(field.label),
@@ -783,8 +813,54 @@ Future<Map<String, Object?>?> showSmartForm(
                       final picked = await showDatePicker(
                         context: dialogContext,
                         initialDate: date,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
+                        firstDate: firstDate,
+                        lastDate: lastDate,
+                      );
+                      if (picked != null) {
+                        setDialogState(
+                          () => values[field.key] =
+                              '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}',
+                        );
+                      }
+                    },
+                  );
+                case SmartFieldKind.optionalDate:
+                  final value = values[field.key]?.toString() ?? '';
+                  final requestedDate =
+                      DateTime.tryParse(value) ?? DateTime.now();
+                  final firstDate = field.firstDate ?? DateTime(2000);
+                  final lastDate = field.lastDate ?? DateTime(2100);
+                  final date = requestedDate.isBefore(firstDate)
+                      ? firstDate
+                      : requestedDate.isAfter(lastDate)
+                      ? lastDate
+                      : requestedDate;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(field.label),
+                    subtitle: Text(
+                      value.isEmpty ? 'Sem vencimento' : dateLabel(value),
+                      style: const TextStyle(color: AppTheme.lime),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (value.isNotEmpty)
+                          IconButton(
+                            tooltip: 'Limpar vencimento',
+                            onPressed: () =>
+                                setDialogState(() => values[field.key] = ''),
+                            icon: const Icon(Icons.close),
+                          ),
+                        const Icon(Icons.calendar_month),
+                      ],
+                    ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: date,
+                        firstDate: firstDate,
+                        lastDate: lastDate,
                       );
                       if (picked != null) {
                         setDialogState(

@@ -145,7 +145,6 @@ class SettingsPage extends StatelessWidget {
       final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       await AppDatabase.instance.restoreAll(decoded);
       await vm.load();
-      if (context.mounted) _notice(context, 'Backup restaurado.');
     } catch (_) {
       if (context.mounted) {
         _notice(
@@ -153,6 +152,17 @@ class SettingsPage extends StatelessWidget {
           'Não foi possível restaurar. Escolha um backup JSON válido.',
         );
       }
+      return;
+    }
+    if (!context.mounted) return;
+    final remindersEnabled = await vm.refreshExpenseNotifications();
+    if (context.mounted) {
+      _notice(
+        context,
+        remindersEnabled
+            ? 'Backup restaurado.'
+            : 'Backup restaurado, mas ative as notificações do aparelho para receber lembretes.',
+      );
     }
   }
 

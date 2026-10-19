@@ -7,7 +7,11 @@ class GoalsPage extends StatelessWidget {
   const GoalsPage({required this.vm, super.key});
   final FinanceViewModel vm;
 
-  Future<void> _add(BuildContext context) async {
+  Future<void> _editOrAdd(
+    BuildContext context, {
+    Map<String, Object?>? existing,
+  }) async {
+    final selectedCategory = FinanceViewModel.string(existing?['category']);
     final categories = vm
         .categoriesFor('goals')
         .map(
@@ -17,53 +21,93 @@ class GoalsPage extends StatelessWidget {
           ),
         )
         .toList();
-    final data = await showSmartForm(context, 'Nova meta de compra', [
-      const SmartFieldSpec(key: 'title', label: 'O que você quer comprar?'),
-      SmartFieldSpec(
-        key: 'category',
-        label: 'Categoria',
-        kind: SmartFieldKind.dropdown,
-        options: categories,
-        onCreateOption: (dialogContext) => createCategoryOption(
-          dialogContext,
-          (name) => vm.addCategory(name, 'goals'),
+    if (selectedCategory.isNotEmpty &&
+        !categories.any((option) => option.value == selectedCategory)) {
+      categories.add((value: selectedCategory, label: selectedCategory));
+    }
+    final data = await showSmartForm(
+      context,
+      existing == null ? 'Nova meta de compra' : 'Editar meta',
+      [
+        SmartFieldSpec(
+          key: 'title',
+          label: 'O que você quer comprar?',
+          initial: FinanceViewModel.string(existing?['title']),
         ),
-        onDeleteOption: (dialogContext, name) => deleteCategoryOption(
-          dialogContext,
-          name,
-          vm.categoriesFor('goals'),
-          vm.deleteCategory,
+        SmartFieldSpec(
+          key: 'category',
+          label: 'Categoria',
+          initial: selectedCategory,
+          kind: SmartFieldKind.dropdown,
+          options: categories,
+          onCreateOption: (dialogContext) => createCategoryOption(
+            dialogContext,
+            (name) => vm.addCategory(name, 'goals'),
+          ),
+          onDeleteOption: (dialogContext, name) => deleteCategoryOption(
+            dialogContext,
+            name,
+            vm.categoriesFor('goals'),
+            vm.deleteCategory,
+          ),
         ),
-      ),
-      const SmartFieldSpec(key: 'description', label: 'Descrição'),
-      const SmartFieldSpec(
-        key: 'unit',
-        label: 'Valor unitário',
-        keyboard: TextInputType.number,
-      ),
-      const SmartFieldSpec(
-        key: 'quantity',
-        label: 'Quantidade',
-        initial: '1',
-        keyboard: TextInputType.number,
-      ),
-    ]);
+        SmartFieldSpec(
+          key: 'description',
+          label: 'Descrição',
+          initial: FinanceViewModel.string(existing?['description']),
+        ),
+        SmartFieldSpec(
+          key: 'unit',
+          label: 'Valor unitário',
+          initial: existing == null
+              ? ''
+              : (FinanceViewModel.integer(existing['unit_cents']) / 100)
+                    .toStringAsFixed(2)
+                    .replaceAll('.', ','),
+          keyboard: TextInputType.number,
+        ),
+        SmartFieldSpec(
+          key: 'quantity',
+          label: 'Quantidade',
+          initial: '${existing?['quantity'] ?? 1}',
+          keyboard: TextInputType.number,
+        ),
+      ],
+    );
     if (data == null ||
         data['category'] == null ||
         data['title'].toString().trim().isEmpty ||
         centsFrom(data['unit'].toString()) <= 0) {
       return;
     }
-    await vm.addGoal(
-      title: data['title'].toString().trim(),
-      category: data['category']?.toString() ?? 'Outros',
-      description: data['description']?.toString() ?? '',
-      unitCents: centsFrom(data['unit'].toString()),
-      quantity: (int.tryParse(data['quantity'].toString()) ?? 1).clamp(
+    final payload = {
+      'title': data['title'].toString().trim(),
+      'category': data['category']?.toString() ?? 'Outros',
+      'description': data['description']?.toString() ?? '',
+      'unitCents': centsFrom(data['unit'].toString()),
+      'quantity': (int.tryParse(data['quantity'].toString()) ?? 1).clamp(
         1,
         10000,
       ),
-    );
+    };
+    if (existing == null) {
+      await vm.addGoal(
+        title: payload['title'] as String,
+        category: payload['category'] as String,
+        description: payload['description'] as String,
+        unitCents: payload['unitCents'] as int,
+        quantity: payload['quantity'] as int,
+      );
+    } else {
+      await vm.updateGoal(
+        id: FinanceViewModel.integer(existing['id']),
+        title: payload['title'] as String,
+        category: payload['category'] as String,
+        description: payload['description'] as String,
+        unitCents: payload['unitCents'] as int,
+        quantity: payload['quantity'] as int,
+      );
+    }
   }
 
   @override
@@ -100,7 +144,7 @@ class GoalsPage extends StatelessWidget {
                 ),
               ),
               FilledButton.icon(
-                onPressed: () => _add(context),
+                onPressed: () => _editOrAdd(context),
                 icon: const Icon(Icons.add),
                 label: const Text('Nova meta'),
               ),
@@ -167,6 +211,7 @@ class GoalsPage extends StatelessWidget {
                       subtitle:
                           '${goal['quantity']} × ${money(FinanceViewModel.integer(goal['unit_cents']))}${details.isEmpty ? '' : '\n$details'}',
                       trailing: money(amount),
+                      onEdit: () => _editOrAdd(context, existing: goal),
                       onDelete: () => vm.delete(
                         'goals',
                         FinanceViewModel.integer(goal['id']),

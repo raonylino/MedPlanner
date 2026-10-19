@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import '../core/database/app_database.dart';
+import '../core/notifications/expense_notification_service.dart';
 
 /// Coordinates use cases for the presentation layer (MVVM ViewModel).
 class FinanceViewModel extends ChangeNotifier {
-  FinanceViewModel(this.db);
+  FinanceViewModel(this.db) : notifications = ExpenseNotificationService();
   final AppDatabase db;
+  final ExpenseNotificationService notifications;
   bool loading = true;
   String month = _monthOf(DateTime.now());
   List<Map<String, Object?>> expenses = [],
@@ -21,6 +23,7 @@ class FinanceViewModel extends ChangeNotifier {
       '${d.year}-${d.month.toString().padLeft(2, '0')}';
   static String monthFromDate(DateTime d) => _monthOf(d);
   static int integer(Object? x) => (x as num?)?.toInt() ?? 0;
+  static double decimal(Object? x) => (x as num?)?.toDouble() ?? 0;
   static String string(Object? x) => x?.toString() ?? '';
 
   Future<void> load({bool showLoading = true}) async {
@@ -45,39 +48,84 @@ class FinanceViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addExpense({
+  Future<bool> refreshExpenseNotifications() =>
+      notifications.replaceAllExpenseReminders(expenses);
+
+  Future<bool> addExpense({
     required String title,
     required String category,
     required int cents,
     required String month,
+    required DateTime? dueDate,
+    required int repeatCount,
   }) async {
-    await db.add('expenses', {
-      'title': title,
-      'category': category,
-      'amount_cents': cents,
-      'month': month,
-      'paid': 0,
+    final start = dueDate ?? DateTime.tryParse('$month-01') ?? DateTime.now();
+    final created = <Map<String, Object?>>[];
+    final database = await db.database;
+    await database.transaction((transaction) async {
+      for (var index = 0; index < repeatCount; index++) {
+        final occurrenceMonth = DateTime(start.year, start.month + index, 1);
+        final day = dueDate == null
+            ? null
+            : DateTime(
+                occurrenceMonth.year,
+                occurrenceMonth.month,
+                dueDate.day.clamp(
+                  1,
+                  DateTime(
+                    occurrenceMonth.year,
+                    occurrenceMonth.month + 1,
+                    0,
+                  ).day,
+                ),
+              );
+        final row = <String, Object?>{
+          'title': title,
+          'category': category,
+          'amount_cents': cents,
+          'month': _monthOf(occurrenceMonth),
+          'paid': 0,
+          'due_date': day == null
+              ? null
+              : '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
+        };
+        row['id'] = await transaction.insert('expenses', row);
+        created.add(row);
+      }
     });
+    var remindersEnabled = true;
+    for (final expense in created) {
+      remindersEnabled =
+          await notifications.syncExpense(expense) && remindersEnabled;
+    }
     await load(showLoading: false);
+    return remindersEnabled;
   }
 
-  Future<void> updateExpense({
+  Future<bool> updateExpense({
     required int id,
     required String title,
     required String category,
     required int cents,
+    required DateTime? dueDate,
   }) async {
     await db.update('expenses', {
       'title': title,
       'category': category,
       'amount_cents': cents,
+      'due_date': dueDate == null
+          ? null
+          : '${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}',
     }, id);
+    final updated = await db.rows('expenses', where: 'id = ?', args: [id]);
+    final remindersEnabled = await notifications.syncExpense(updated.single);
     await load(showLoading: false);
+    return remindersEnabled;
   }
 
   Future<void> addIncome({
     required String service,
-    required int quantity,
+    required double quantity,
     required int unitCents,
     required DateTime date,
     required String receiveMonth,
@@ -105,7 +153,7 @@ class FinanceViewModel extends ChangeNotifier {
   Future<void> updateIncome({
     required int id,
     required String service,
-    required int quantity,
+    required double quantity,
     required int unitCents,
     required DateTime date,
     required String receiveMonth,
@@ -174,20 +222,36 @@ class FinanceViewModel extends ChangeNotifier {
     final months = recurring ? 12 : count;
     final per = recurring ? totalCents : totalCents ~/ count,
         remainder = recurring ? 0 : totalCents % count;
-    for (var i = 0; i < months; i++) {
-      final d = DateTime(start.year, start.month + i, 1);
-      await db.add('card_expenses', {
-        'card_id': cardId,
-        'title': title,
-        'category': category,
-        'amount_cents': per + (!recurring && i == count - 1 ? remainder : 0),
-        'installment_count': recurring ? 1 : count,
-        'installment_index': recurring ? 1 : i + 1,
-        'month': _monthOf(d),
-        'recurring': recurring ? 1 : 0,
-        'paid': 0,
-      });
-    }
+    final currentMonth = _monthOf(DateTime.now());
+    final database = await db.database;
+    await database.transaction((transaction) async {
+      String? purchaseId;
+      for (var i = 0; i < months; i++) {
+        final d = DateTime(start.year, start.month + i, 1);
+        final row = <String, Object?>{
+          'card_id': cardId,
+          'title': title,
+          'category': category,
+          'amount_cents': per + (!recurring && i == count - 1 ? remainder : 0),
+          'installment_count': recurring ? 1 : count,
+          'installment_index': recurring ? 1 : i + 1,
+          'month': _monthOf(d),
+          'recurring': recurring ? 1 : 0,
+          'paid': _monthOf(d).compareTo(currentMonth) < 0 ? 1 : 0,
+        };
+        if (purchaseId != null) row['purchase_id'] = purchaseId;
+        final id = await transaction.insert('card_expenses', row);
+        purchaseId ??= '$id';
+        if (i == 0) {
+          await transaction.update(
+            'card_expenses',
+            {'purchase_id': purchaseId},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+      }
+    });
     await load(showLoading: false);
   }
 
@@ -202,6 +266,55 @@ class FinanceViewModel extends ChangeNotifier {
       'category': category,
       'amount_cents': amountCents,
     }, id);
+    await load(showLoading: false);
+  }
+
+  Future<void> updateCardPurchase({
+    required String purchaseId,
+    required String title,
+    required String category,
+    required int totalCents,
+  }) async {
+    final database = await db.database;
+    final purchase = await db.rows(
+      'card_expenses',
+      where: 'purchase_id = ?',
+      args: [purchaseId],
+      orderBy: 'installment_index',
+    );
+    if (purchase.isEmpty) {
+      throw StateError('A compra não existe mais.');
+    }
+    final recurring = integer(purchase.first['recurring']) == 1;
+    final count = integer(purchase.first['installment_count']).clamp(1, 1000);
+    final installmentValue = recurring ? totalCents : totalCents ~/ count;
+    final remainder = recurring ? 0 : totalCents % count;
+    await database.transaction((transaction) async {
+      for (final installment in purchase) {
+        final index = integer(installment['installment_index']);
+        await transaction.update(
+          'card_expenses',
+          {
+            'title': title,
+            'category': category,
+            'amount_cents':
+                installmentValue +
+                (!recurring && index == count ? remainder : 0),
+          },
+          where: 'id = ?',
+          whereArgs: [installment['id']],
+        );
+      }
+    });
+    await load(showLoading: false);
+  }
+
+  Future<void> deleteCardPurchase(String purchaseId) async {
+    await (await db.database).delete(
+      'card_expenses',
+      where: 'purchase_id = ?',
+      whereArgs: [purchaseId],
+    );
     await load(showLoading: false);
   }
 
@@ -222,11 +335,37 @@ class FinanceViewModel extends ChangeNotifier {
     await load(showLoading: false);
   }
 
-  Future<void> setPaid(String table, int id, bool paid) async {
+  Future<void> updateGoal({
+    required int id,
+    required String title,
+    required String category,
+    required String description,
+    required int unitCents,
+    required int quantity,
+  }) async {
+    await db.update('goals', {
+      'title': title,
+      'category': category,
+      'description': description,
+      'unit_cents': unitCents,
+      'quantity': quantity,
+    }, id);
+    await load(showLoading: false);
+  }
+
+  Future<bool> setPaid(String table, int id, bool paid) async {
     await db.update(table, {
       table == 'expenses' ? 'paid' : 'received': paid ? 1 : 0,
     }, id);
+    var remindersEnabled = true;
+    if (table == 'expenses') {
+      final expense = await db.rows('expenses', where: 'id = ?', args: [id]);
+      if (expense.isNotEmpty) {
+        remindersEnabled = await notifications.syncExpense(expense.single);
+      }
+    }
     await load(showLoading: false);
+    return remindersEnabled;
   }
 
   Future<void> setCardInstallmentPaid(int id, bool paid) async {
@@ -235,6 +374,7 @@ class FinanceViewModel extends ChangeNotifier {
   }
 
   Future<void> delete(String table, int id) async {
+    if (table == 'expenses') await notifications.cancelExpense(id);
     await db.remove(table, id);
     await load(showLoading: false);
   }
@@ -388,7 +528,7 @@ class FinanceViewModel extends ChangeNotifier {
   }
 
   int _grossIncome(Map<String, Object?> entry) =>
-      integer(entry['unit_cents']) * integer(entry['quantity']);
+      (integer(entry['unit_cents']) * decimal(entry['quantity'])).round();
 
   int _netIncome(Map<String, Object?> entry) {
     final gross = _grossIncome(entry);

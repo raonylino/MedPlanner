@@ -11,6 +11,19 @@ class PlanningPage extends StatelessWidget {
     BuildContext context, {
     Map<String, Object?>? existing,
   }) async {
+    final targetMonth = FinanceViewModel.string(existing?['month'] ?? vm.month);
+    final firstDay = DateTime.tryParse('$targetMonth-01') ?? DateTime.now();
+    final lastDay = DateTime(firstDay.year, firstDay.month + 1, 0);
+    final today = DateTime.now();
+    final defaultDay =
+        existing == null &&
+            today.year == firstDay.year &&
+            today.month == firstDay.month
+        ? today.day
+        : 1;
+    final initialDueDate = existing == null
+        ? '${firstDay.year}-${firstDay.month.toString().padLeft(2, '0')}-${defaultDay.toString().padLeft(2, '0')}'
+        : FinanceViewModel.string(existing['due_date']);
     final options = vm
         .categoriesFor('planning')
         .map(
@@ -61,6 +74,21 @@ class PlanningPage extends StatelessWidget {
                     .replaceAll('.', ','),
           keyboard: TextInputType.number,
         ),
+        SmartFieldSpec(
+          key: 'due_date',
+          label: 'Vencimento',
+          initial: initialDueDate,
+          kind: SmartFieldKind.optionalDate,
+          firstDate: firstDay,
+          lastDate: lastDay,
+        ),
+        if (existing == null)
+          const SmartFieldSpec(
+            key: 'repeat_count',
+            label: 'Repetir por quantos meses? (total, incluindo este mês)',
+            initial: '1',
+            keyboard: TextInputType.number,
+          ),
       ],
     );
     if (data == null ||
@@ -69,23 +97,44 @@ class PlanningPage extends StatelessWidget {
         centsFrom(data['amount'].toString()) <= 0) {
       return;
     }
+    if (!context.mounted) return;
+    final repeatCount = int.tryParse(data['repeat_count']?.toString() ?? '1');
+    if (existing == null &&
+        (repeatCount == null || repeatCount < 1 || repeatCount > 120)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Informe uma quantidade entre 1 e 120 meses.'),
+        ),
+      );
+      return;
+    }
+    final dueDate = DateTime.tryParse(data['due_date']?.toString() ?? '');
     final title = data['title'].toString().trim();
     final category = data['category']?.toString() ?? 'Outros';
     final cents = centsFrom(data['amount'].toString());
     if (existing == null) {
-      await vm.addExpense(
+      final remindersEnabled = await vm.addExpense(
         title: title,
         category: category,
         cents: cents,
         month: vm.month,
+        dueDate: dueDate,
+        repeatCount: repeatCount!,
       );
+      if (dueDate != null && !remindersEnabled && context.mounted) {
+        _showNotificationUnavailable(context);
+      }
     } else {
-      await vm.updateExpense(
+      final remindersEnabled = await vm.updateExpense(
         id: FinanceViewModel.integer(existing['id']),
         title: title,
         category: category,
         cents: cents,
+        dueDate: dueDate,
       );
+      if (dueDate != null && !remindersEnabled && context.mounted) {
+        _showNotificationUnavailable(context);
+      }
     }
   }
 
@@ -216,14 +265,28 @@ class PlanningPage extends StatelessWidget {
                 ...group.value.map((e) {
                   final id = FinanceViewModel.integer(e['id']);
                   final paid = FinanceViewModel.integer(e['paid']) == 1;
+                  final dueDate = FinanceViewModel.string(e['due_date']);
                   return Card(
                     child: CheckboxListTile(
                       value: paid,
-                      onChanged: (v) => vm.setPaid('expenses', id, v ?? false),
+                      onChanged: (v) async {
+                        final remindersEnabled = await vm.setPaid(
+                          'expenses',
+                          id,
+                          v ?? false,
+                        );
+                        if (!remindersEnabled && context.mounted) {
+                          _showNotificationUnavailable(context);
+                        }
+                      },
                       controlAffinity: ListTileControlAffinity.leading,
                       title: Text(FinanceViewModel.string(e['title'])),
                       subtitle: Text(
-                        paid ? 'Pago' : 'Previsto',
+                        [
+                          paid ? 'Pago' : 'Previsto',
+                          if (dueDate.isNotEmpty)
+                            'Vence em ${dateLabel(dueDate)}',
+                        ].join(' • '),
                         style: const TextStyle(color: AppTheme.muted),
                       ),
                       secondary: Row(
@@ -274,6 +337,16 @@ class PlanningPage extends StatelessWidget {
       selectedMonth: vm.month,
       onChanged: vm.setMonthValue,
       label: 'Mês do planejamento',
+    );
+  }
+
+  void _showNotificationUnavailable(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Despesa atualizada, mas os lembretes estão desativados. Ative as notificações nas configurações do aparelho.',
+        ),
+      ),
     );
   }
 }
