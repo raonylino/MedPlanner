@@ -2,7 +2,9 @@ import 'package:circle_nav_bar/circle_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/config/supabase_config.dart';
 import 'core/providers/app_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'features/cards/view/cards_page.dart';
@@ -18,7 +20,14 @@ import 'features/planning/viewmodel/planning_view_model.dart';
 import 'features/settings/view/settings_page.dart';
 import 'features/settings/viewmodel/settings_view_model.dart';
 
-void main() => runApp(const ProviderScope(child: FinanceApp()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: SupabaseConfig.url,
+    publishableKey: SupabaseConfig.publishableKey,
+  );
+  runApp(const ProviderScope(child: FinanceApp()));
+}
 
 class FinanceApp extends ConsumerWidget {
   const FinanceApp({super.key});

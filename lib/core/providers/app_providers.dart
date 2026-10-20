@@ -1,12 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../database/app_database.dart';
 import '../notifications/expense_notification_service.dart';
 import '../../features/finance_commands.dart';
+import '../../features/settings/viewmodel/cloud_backup_view_model.dart';
 import 'finance_controller.dart';
 import '../models/finance_state.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>(
   (ref) => AppDatabase.instance,
+);
+final supabaseClientProvider = Provider<SupabaseClient>(
+  (ref) => Supabase.instance.client,
+);
+final supabaseAuthStateProvider = StreamProvider<AuthState>(
+  (ref) => ref.watch(supabaseClientProvider).auth.onAuthStateChange,
+);
+final cloudBackupViewModelProvider = Provider<CloudBackupViewModel>(
+  (ref) => CloudBackupViewModel(ref.watch(supabaseClientProvider)),
 );
 final expenseNotificationServiceProvider = Provider<ExpenseNotificationService>(
   (ref) => ExpenseNotificationService(),

@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/ui.dart';
+import 'cloud_backup_panel.dart';
 import '../viewmodel/settings_view_model.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -230,10 +231,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: Icon(
-                  Icons.savings_outlined,
-                  color: AppTheme.lime,
-                ),
+                leading: Icon(Icons.savings_outlined, color: AppTheme.lime),
                 title: const Text('Regras de investimento'),
                 subtitle: const Text(
                   'Percentual calculado sobre o recebimento após imposto',
@@ -282,6 +280,13 @@ class SettingsPage extends StatelessWidget {
             ),
             const SizedBox(height: 22),
             const Text(
+              'Supabase e nuvem',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            CloudBackupPanel(finance: vm),
+            const SizedBox(height: 22),
+            const Text(
               'Backup e exportação',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -300,10 +305,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: Icon(
-                  Icons.backup_outlined,
-                  color: AppTheme.lime,
-                ),
+                leading: Icon(Icons.backup_outlined, color: AppTheme.lime),
                 title: const Text('Criar backup dos dados'),
                 subtitle: const Text(
                   'Gera arquivo JSON para guardar ou compartilhar',
@@ -327,7 +329,7 @@ class SettingsPage extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              'Os dados ficam neste aparelho. Guarde uma cópia do backup em local seguro; a restauração substitui os dados atuais.',
+              'Os dados ficam neste aparelho. O envio e a restauração na nuvem são manuais; a restauração substitui os dados locais.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12),
             ),
           ],
