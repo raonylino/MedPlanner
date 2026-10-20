@@ -191,8 +191,8 @@ class GoalsPage extends StatelessWidget {
                       ),
                       Text(
                         money(subtotal),
-                        style: const TextStyle(
-                          color: AppTheme.lime,
+                        style: TextStyle(
+                          color: AppTheme.valueGreen,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

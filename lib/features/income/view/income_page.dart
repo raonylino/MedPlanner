@@ -251,7 +251,7 @@ class _IncomePageState extends State<IncomePage> {
               Expanded(
                 child: Text(
                   receivedTab ? 'Recebimentos do mês' : 'Plantões trabalhados',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -300,8 +300,8 @@ class _IncomePageState extends State<IncomePage> {
                 children: [
                   Text(
                     money(value),
-                    style: const TextStyle(
-                      color: AppTheme.lime,
+                    style: TextStyle(
+                      color: AppTheme.valueGreen,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

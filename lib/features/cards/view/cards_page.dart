@@ -478,7 +478,7 @@ class CardsPage extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: ExpansionTile(
-                leading: const Icon(Icons.credit_card, color: AppTheme.lime),
+                leading: Icon(Icons.credit_card, color: AppTheme.lime),
                 title: Text(
                   FinanceController.string(card['name']),
                   style: const TextStyle(fontWeight: FontWeight.bold),
@@ -513,7 +513,7 @@ class CardsPage extends StatelessWidget {
                     value: limit == 0
                         ? 0
                         : (outstanding / limit).clamp(0.0, 1.0),
-                    color: AppTheme.lime,
+                    color: AppTheme.valueGreen,
                     backgroundColor: AppTheme.surface2,
                   ),
                   Padding(
@@ -610,8 +610,8 @@ class CardsPage extends StatelessWidget {
             ),
             trailing: Text(
               money(total),
-              style: const TextStyle(
-                color: AppTheme.lime,
+              style: TextStyle(
+                color: AppTheme.valueGreen,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -668,8 +668,8 @@ class CardsPage extends StatelessWidget {
                         ? FinanceController.integer(first['amount_cents'])
                         : total,
                   ),
-                  style: const TextStyle(
-                    color: AppTheme.lime,
+                  style: TextStyle(
+                    color: AppTheme.valueGreen,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

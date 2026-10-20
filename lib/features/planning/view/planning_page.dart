@@ -261,8 +261,8 @@ class PlanningPage extends StatelessWidget {
                       const SizedBox(width: 12),
                       Text(
                         money(subtotal),
-                        style: const TextStyle(
-                          color: AppTheme.lime,
+                        style: TextStyle(
+                          color: AppTheme.valueGreen,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -301,8 +301,8 @@ class PlanningPage extends StatelessWidget {
                         children: [
                           Text(
                             money(FinanceController.integer(e['amount_cents'])),
-                            style: const TextStyle(
-                              color: AppTheme.lime,
+                            style: TextStyle(
+                              color: AppTheme.valueGreen,
                               fontWeight: FontWeight.bold,
                             ),
                           ),

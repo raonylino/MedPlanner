@@ -218,7 +218,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: const Icon(Icons.percent, color: AppTheme.lime),
+                leading: Icon(Icons.percent, color: AppTheme.lime),
                 title: const Text('Imposto estimado'),
                 subtitle: Text(
                   'Usado somente em recebimentos marcados • ${vm.taxPercent}%',
@@ -230,7 +230,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.savings_outlined,
                   color: AppTheme.lime,
                 ),
@@ -268,7 +268,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 8),
             Card(
               child: SwitchListTile(
-                secondary: const Icon(
+                secondary: Icon(
                   Icons.light_mode_outlined,
                   color: AppTheme.lime,
                 ),
@@ -288,7 +288,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.file_download_outlined,
                   color: AppTheme.lime,
                 ),
@@ -300,7 +300,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.backup_outlined,
                   color: AppTheme.lime,
                 ),
@@ -314,7 +314,7 @@ class SettingsPage extends StatelessWidget {
             const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.settings_backup_restore,
                   color: AppTheme.lime,
                 ),

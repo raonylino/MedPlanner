@@ -3,13 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/providers/app_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'features/cards/view/cards_page.dart';
 import 'features/cards/viewmodel/cards_view_model.dart';
-
 import 'features/dashboard/view/dashboard_page.dart';
 import 'features/dashboard/viewmodel/dashboard_view_model.dart';
-import 'core/providers/app_providers.dart';
 import 'features/goals/view/goals_page.dart';
 import 'features/goals/viewmodel/goals_view_model.dart';
 import 'features/income/view/income_page.dart';
@@ -231,11 +230,11 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
         activeIndex: selected,
         onTap: (index) => setState(() => selected = index),
         activeIcons: [
-          Icon(Icons.south_west, color: AppTheme.bg),
-          Icon(Icons.event_note, color: AppTheme.bg),
-          Icon(Icons.space_dashboard, color: AppTheme.bg),
-          Icon(Icons.credit_card, color: AppTheme.bg),
-          Icon(Icons.flag, color: AppTheme.bg),
+          Icon(Icons.south_west, color: AppTheme.onLime),
+          Icon(Icons.event_note, color: AppTheme.onLime),
+          Icon(Icons.space_dashboard, color: AppTheme.onLime),
+          Icon(Icons.credit_card, color: AppTheme.onLime),
+          Icon(Icons.flag, color: AppTheme.onLime),
         ],
         inactiveIcons: [
           Icon(Icons.south_west, color: AppTheme.muted),
@@ -245,15 +244,12 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
           Icon(Icons.flag_outlined, color: AppTheme.muted),
         ],
         levels: const ['Entradas', 'Planejar', 'Início', 'Cartões', 'Metas'],
-        activeLevelsStyle: const TextStyle(
-          color: AppTheme.lime,
+        activeLevelsStyle: TextStyle(
+          color: AppTheme.valueGreen,
           fontSize: 10,
           fontWeight: FontWeight.w700,
         ),
-        inactiveLevelsStyle: TextStyle(
-          color: AppTheme.muted,
-          fontSize: 10,
-        ),
+        inactiveLevelsStyle: TextStyle(color: AppTheme.muted, fontSize: 10),
         color: AppTheme.surface,
         circleColor: AppTheme.lime,
         height: 66,

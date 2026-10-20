@@ -13,10 +13,7 @@ class DashboardPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       children: [
-        Text(
-          'Seu resumo mensal',
-          style: TextStyle(color: AppTheme.muted),
-        ),
+        Text('Seu resumo mensal', style: TextStyle(color: AppTheme.muted)),
         const SizedBox(height: 8),
         MonthCarousel(
           selectedMonth: vm.month,
@@ -157,8 +154,8 @@ class DashboardPage extends StatelessWidget {
                 ),
                 Text(
                   money(vm.taxAmountForYear(selectedYear)),
-                  style: const TextStyle(
-                    color: AppTheme.lime,
+                  style: TextStyle(
+                    color: AppTheme.valueGreen,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -178,7 +175,7 @@ class DashboardPage extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.percent, size: 18, color: AppTheme.lime),
+              Icon(Icons.percent, size: 18, color: AppTheme.lime),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -188,8 +185,8 @@ class DashboardPage extends StatelessWidget {
               ),
               Text(
                 money(vm.taxAmountForMonth(vm.month)),
-                style: const TextStyle(
-                  color: AppTheme.lime,
+                style: TextStyle(
+                  color: AppTheme.valueGreen,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -217,10 +214,10 @@ class DashboardPage extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 5),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.savings_outlined,
                       size: 18,
-                      color: AppTheme.lime,
+                      color: AppTheme.valueGreen,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -243,8 +240,8 @@ class DashboardPage extends StatelessWidget {
                     ),
                     Text(
                       money(monthlyValue),
-                      style: const TextStyle(
-                        color: AppTheme.lime,
+                      style: TextStyle(
+                        color: AppTheme.valueGreen,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -284,8 +281,8 @@ class DashboardPage extends StatelessWidget {
               Expanded(child: Text(label)),
               Text(
                 money(value),
-                style: const TextStyle(
-                  color: AppTheme.lime,
+                style: TextStyle(
+                  color: AppTheme.valueGreen,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -304,7 +301,19 @@ class DashboardPage extends StatelessWidget {
             'de ${money(total)}',
             style: TextStyle(color: AppTheme.muted, fontSize: 12),
           ),
-          if (details != null) ...[const SizedBox(height: 12), details],
+          if (details != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.lightMode
+                    ? AppTheme.surface2
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: details,
+            ),
+          ],
         ],
       ),
     );
@@ -369,7 +378,7 @@ class DashboardPage extends StatelessWidget {
                       ),
                       Text(
                         money(entry.value),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.lime,
                           fontWeight: FontWeight.bold,
                         ),

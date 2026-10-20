@@ -44,7 +44,7 @@ class AmountCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(18),
     decoration: BoxDecoration(
-      color: highlight ? AppTheme.lime : AppTheme.surface,
+      color: highlight ? AppTheme.accentSurface : AppTheme.surface,
       borderRadius: BorderRadius.circular(18),
     ),
     child: Column(
@@ -94,8 +94,8 @@ class RecordTile extends StatelessWidget {
         children: [
           Text(
             trailing,
-            style: const TextStyle(
-              color: AppTheme.lime,
+            style: TextStyle(
+              color: AppTheme.valueGreen,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -407,7 +407,7 @@ class _MonthCarouselState extends State<MonthCarousel> {
                     return ListTile(
                       title: Text(monthLabel(value)),
                       trailing: value == widget.selectedMonth
-                          ? const Icon(Icons.check, color: AppTheme.lime)
+                          ? Icon(Icons.check, color: AppTheme.lime)
                           : null,
                       onTap: () {
                         widget.onChanged(value);
@@ -481,7 +481,7 @@ class _MonthCarouselState extends State<MonthCarousel> {
                     onSelected: (_) => widget.onChanged(value),
                     selectedColor: AppTheme.lime,
                     labelStyle: TextStyle(
-                      color: active ? AppTheme.bg : AppTheme.text,
+                      color: active ? AppTheme.onLime : AppTheme.text,
                       fontWeight: FontWeight.w600,
                     ),
                     backgroundColor: AppTheme.surface,
@@ -565,7 +565,7 @@ Future<String?> _showCategorySelector(
                 ),
               if (field.onCreateOption != null)
                 ListTile(
-                  leading: const Icon(Icons.add, color: AppTheme.lime),
+                  leading: Icon(Icons.add, color: AppTheme.lime),
                   title: const Text('Criar categoria'),
                   onTap: () async {
                     final created = await field.onCreateOption!(pickerContext);
@@ -814,7 +814,7 @@ Future<Map<String, Object?>?> showSmartForm(
                     title: Text(field.label),
                     subtitle: Text(
                       dateLabel(date.toIso8601String()),
-                      style: const TextStyle(color: AppTheme.lime),
+                      style: TextStyle(color: AppTheme.valueGreen),
                     ),
                     trailing: const Icon(Icons.calendar_month),
                     onTap: () async {
@@ -851,7 +851,7 @@ Future<Map<String, Object?>?> showSmartForm(
                         title: Text(field.label),
                         subtitle: Text(
                           value.isEmpty ? 'Sem vencimento' : dateLabel(value),
-                          style: TextStyle(color: AppTheme.lime),
+                          style: TextStyle(color: AppTheme.valueGreen),
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
