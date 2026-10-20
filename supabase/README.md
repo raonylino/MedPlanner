@@ -2,6 +2,8 @@
 
 A pasta `supabase/` fica na raiz deste repositório. Na integração GitHub do Supabase, use `.` como **Working directory**.
 
+A integração GitHub está conectada ao projeto Supabase `MedPlanner`, sincronizando a branch `main`.
+
 A migração `migrations/20261020170000_initial_finance_schema.sql` cria o esquema PostgreSQL correspondente às tabelas locais, protege as linhas por `user_id` com RLS e prepara os valores padrão ao cadastrar uma conta Supabase Auth.
 
 ## Atenção antes do primeiro deploy
