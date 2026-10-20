@@ -1,19 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../core/database/app_database.dart';
-import '../../core/theme/app_theme.dart';
-import '../../shared/ui.dart';
-import '../finance_view_model.dart';
+
+import '../../../core/providers/app_providers.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/ui.dart';
+import '../viewmodel/settings_view_model.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({required this.vm, super.key});
-  final FinanceViewModel vm;
+  final FinanceController vm;
 
   Future<void> _tax(BuildContext context) async {
     final data = await showDataForm(context, 'Imposto estimado', [
@@ -62,7 +65,7 @@ class SettingsPage extends StatelessWidget {
     final percentTotal =
         vm.investments
             .where((i) => i['mode'] == 'percent')
-            .fold(0, (a, i) => a + FinanceViewModel.integer(i['value'])) +
+            .fold(0, (a, i) => a + FinanceController.integer(i['value'])) +
         (mode == 'percent' ? value : 0);
     if (value <= 0 || percentTotal > 100) {
       if (context.mounted) {
@@ -96,7 +99,7 @@ class SettingsPage extends StatelessWidget {
   }
 
   Future<void> _backup(BuildContext context) async {
-    final data = await AppDatabase.instance.exportAll();
+    final data = await vm.exportAll();
     final file = await _writeFile(
       'backup_financeiro_${DateTime.now().millisecondsSinceEpoch}.json',
       utf8.encode(const JsonEncoder.withIndent('  ').convert(data)),
@@ -143,8 +146,7 @@ class SettingsPage extends StatelessWidget {
     try {
       final bytes = await File(result.path!).readAsBytes();
       final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
-      await AppDatabase.instance.restoreAll(decoded);
-      await vm.load();
+      await vm.restoreAll(decoded);
     } catch (_) {
       if (context.mounted) {
         _notice(
@@ -167,7 +169,7 @@ class SettingsPage extends StatelessWidget {
   }
 
   Future<void> _xlsx(BuildContext context) async {
-    final data = await AppDatabase.instance.exportAll();
+    final data = await vm.exportAll();
     final excel = Excel.createExcel();
     excel.delete('Sheet1');
     for (final entry in data.entries) {
@@ -201,104 +203,116 @@ class SettingsPage extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: vm,
-    builder: (context, _) => Scaffold(
-      appBar: AppBar(title: const Text('Configurações')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text(
-            'Cálculos',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.percent, color: AppTheme.lime),
-              title: const Text('Imposto estimado'),
-              subtitle: Text(
-                'Usado somente em recebimentos marcados • ${vm.taxPercent}%',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _tax(context),
+  Widget build(BuildContext context) => Consumer(
+    builder: (context, ref, _) {
+      ref.watch(financeProvider);
+      return Scaffold(
+        appBar: AppBar(title: const Text('Configurações')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text(
+              'Cálculos',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.savings_outlined, color: AppTheme.lime),
-              title: const Text('Regras de investimento'),
-              subtitle: const Text(
-                'Percentual calculado sobre o recebimento após imposto',
-              ),
-              trailing: const Icon(Icons.add),
-              onTap: () => _investment(context),
-            ),
-          ),
-          ...vm.investments.map(
-            (i) => Card(
+            const SizedBox(height: 8),
+            Card(
               child: ListTile(
-                title: Text(FinanceViewModel.string(i['name'])),
+                leading: const Icon(Icons.percent, color: AppTheme.lime),
+                title: const Text('Imposto estimado'),
                 subtitle: Text(
-                  i['mode'] == 'percent'
-                      ? '${i['value']}% do líquido'
-                      : 'Valor fixo • ${money(FinanceViewModel.integer(i['value']))}',
+                  'Usado somente em recebimentos marcados • ${vm.taxPercent}%',
                 ),
-                trailing: IconButton(
-                  onPressed: () =>
-                      vm.deleteInvestment(FinanceViewModel.integer(i['id'])),
-                  icon: const Icon(Icons.delete_outline),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _tax(context),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.savings_outlined,
+                  color: AppTheme.lime,
+                ),
+                title: const Text('Regras de investimento'),
+                subtitle: const Text(
+                  'Percentual calculado sobre o recebimento após imposto',
+                ),
+                trailing: const Icon(Icons.add),
+                onTap: () => _investment(context),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...vm.investments.map(
+              (i) => Card(
+                child: ListTile(
+                  title: Text(FinanceController.string(i['name'])),
+                  subtitle: Text(
+                    i['mode'] == 'percent'
+                        ? '${i['value']}% do líquido'
+                        : 'Valor fixo • ${money(FinanceController.integer(i['value']))}',
+                  ),
+                  trailing: IconButton(
+                    onPressed: () =>
+                        vm.deleteInvestment(FinanceController.integer(i['id'])),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 22),
-          const Text(
-            'Backup e exportação',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: ListTile(
-              leading: const Icon(
-                Icons.file_download_outlined,
-                color: AppTheme.lime,
-              ),
-              title: const Text('Exportar planilha Excel'),
-              subtitle: const Text('Gera .xlsx com os dados do aplicativo'),
-              onTap: () => _xlsx(context),
+            const SizedBox(height: 22),
+            const Text(
+              'Backup e exportação',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.backup_outlined, color: AppTheme.lime),
-              title: const Text('Criar backup dos dados'),
-              subtitle: const Text(
-                'Gera arquivo JSON para guardar ou compartilhar',
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.file_download_outlined,
+                  color: AppTheme.lime,
+                ),
+                title: const Text('Exportar planilha Excel'),
+                subtitle: const Text('Gera .xlsx com os dados do aplicativo'),
+                onTap: () => _xlsx(context),
               ),
-              onTap: () => _backup(context),
             ),
-          ),
-          Card(
-            child: ListTile(
-              leading: const Icon(
-                Icons.settings_backup_restore,
-                color: AppTheme.lime,
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.backup_outlined,
+                  color: AppTheme.lime,
+                ),
+                title: const Text('Criar backup dos dados'),
+                subtitle: const Text(
+                  'Gera arquivo JSON para guardar ou compartilhar',
+                ),
+                onTap: () => _backup(context),
               ),
-              title: const Text('Restaurar backup JSON'),
-              subtitle: const Text(
-                'Substitui os dados locais pelo arquivo escolhido',
-              ),
-              onTap: () => _restore(context),
             ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Os dados ficam neste aparelho. Guarde uma cópia do backup em local seguro; a restauração substitui os dados atuais.',
-            style: TextStyle(color: AppTheme.muted, fontSize: 12),
-          ),
-        ],
-      ),
-    ),
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.settings_backup_restore,
+                  color: AppTheme.lime,
+                ),
+                title: const Text('Restaurar backup JSON'),
+                subtitle: const Text(
+                  'Substitui os dados locais pelo arquivo escolhido',
+                ),
+                onTap: () => _restore(context),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Os dados ficam neste aparelho. Guarde uma cópia do backup em local seguro; a restauração substitui os dados atuais.',
+              style: TextStyle(color: AppTheme.muted, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    },
   );
 }

@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_theme.dart';
-import '../../shared/ui.dart';
-import '../finance_view_model.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/ui.dart';
+import '../viewmodel/goals_view_model.dart';
 
 class GoalsPage extends StatelessWidget {
   const GoalsPage({required this.vm, super.key});
-  final FinanceViewModel vm;
+  final FinanceController vm;
 
   Future<void> _editOrAdd(
     BuildContext context, {
     Map<String, Object?>? existing,
   }) async {
-    final selectedCategory = FinanceViewModel.string(existing?['category']);
+    final selectedCategory = FinanceController.string(existing?['category']);
     final categories = vm
         .categoriesFor('goals')
         .map(
           (c) => (
-            value: FinanceViewModel.string(c['name']),
-            label: FinanceViewModel.string(c['name']),
+            value: FinanceController.string(c['name']),
+            label: FinanceController.string(c['name']),
           ),
         )
         .toList();
@@ -32,7 +32,7 @@ class GoalsPage extends StatelessWidget {
         SmartFieldSpec(
           key: 'title',
           label: 'O que você quer comprar?',
-          initial: FinanceViewModel.string(existing?['title']),
+          initial: FinanceController.string(existing?['title']),
         ),
         SmartFieldSpec(
           key: 'category',
@@ -54,14 +54,14 @@ class GoalsPage extends StatelessWidget {
         SmartFieldSpec(
           key: 'description',
           label: 'Descrição',
-          initial: FinanceViewModel.string(existing?['description']),
+          initial: FinanceController.string(existing?['description']),
         ),
         SmartFieldSpec(
           key: 'unit',
           label: 'Valor unitário',
           initial: existing == null
               ? ''
-              : (FinanceViewModel.integer(existing['unit_cents']) / 100)
+              : (FinanceController.integer(existing['unit_cents']) / 100)
                     .toStringAsFixed(2)
                     .replaceAll('.', ','),
           keyboard: TextInputType.number,
@@ -100,7 +100,7 @@ class GoalsPage extends StatelessWidget {
       );
     } else {
       await vm.updateGoal(
-        id: FinanceViewModel.integer(existing['id']),
+        id: FinanceController.integer(existing['id']),
         title: payload['title'] as String,
         category: payload['category'] as String,
         description: payload['description'] as String,
@@ -115,7 +115,7 @@ class GoalsPage extends StatelessWidget {
     final grouped = <String, List<Map<String, Object?>>>{};
     for (final goal in vm.goals) {
       grouped
-          .putIfAbsent(FinanceViewModel.string(goal['category']), () => [])
+          .putIfAbsent(FinanceController.string(goal['category']), () => [])
           .add(goal);
     }
     return ListView(
@@ -165,8 +165,8 @@ class GoalsPage extends StatelessWidget {
             0,
             (sum, item) =>
                 sum +
-                FinanceViewModel.integer(item['unit_cents']) *
-                    FinanceViewModel.integer(item['quantity']),
+                FinanceController.integer(item['unit_cents']) *
+                    FinanceController.integer(item['quantity']),
           );
           return Padding(
             padding: const EdgeInsets.fromLTRB(20, 6, 20, 2),
@@ -201,20 +201,20 @@ class GoalsPage extends StatelessWidget {
                 ),
                 ...group.value.map((goal) {
                   final amount =
-                      FinanceViewModel.integer(goal['unit_cents']) *
-                      FinanceViewModel.integer(goal['quantity']);
-                  final details = FinanceViewModel.string(goal['description']);
+                      FinanceController.integer(goal['unit_cents']) *
+                      FinanceController.integer(goal['quantity']);
+                  final details = FinanceController.string(goal['description']);
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3),
                     child: RecordTile(
-                      title: FinanceViewModel.string(goal['title']),
+                      title: FinanceController.string(goal['title']),
                       subtitle:
-                          '${goal['quantity']} × ${money(FinanceViewModel.integer(goal['unit_cents']))}${details.isEmpty ? '' : '\n$details'}',
+                          '${goal['quantity']} × ${money(FinanceController.integer(goal['unit_cents']))}${details.isEmpty ? '' : '\n$details'}',
                       trailing: money(amount),
                       onEdit: () => _editOrAdd(context, existing: goal),
                       onDelete: () => vm.delete(
                         'goals',
-                        FinanceViewModel.integer(goal['id']),
+                        FinanceController.integer(goal['id']),
                       ),
                     ),
                   );

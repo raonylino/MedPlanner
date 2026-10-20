@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_theme.dart';
-import '../../shared/ui.dart';
-import '../finance_view_model.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/ui.dart';
+import '../viewmodel/cards_view_model.dart';
 
 class CardsPage extends StatelessWidget {
   const CardsPage({required this.vm, super.key});
-  final FinanceViewModel vm;
+  final FinanceController vm;
 
   Future<void> _addCard(BuildContext context) async {
     final data = await showDataForm(context, 'Cadastrar cartão', [
@@ -38,13 +38,13 @@ class CardsPage extends StatelessWidget {
       (
         key: 'name',
         label: 'Nome do cartão',
-        initial: FinanceViewModel.string(card['name']),
+        initial: FinanceController.string(card['name']),
         keyboard: TextInputType.text,
       ),
       (
         key: 'limit',
         label: 'Limite mensal do cartão (R\$)',
-        initial: (FinanceViewModel.integer(card['limit_cents']) / 100)
+        initial: (FinanceController.integer(card['limit_cents']) / 100)
             .toStringAsFixed(2)
             .replaceAll('.', ','),
         keyboard: TextInputType.number,
@@ -56,7 +56,7 @@ class CardsPage extends StatelessWidget {
       return;
     }
     await vm.updateCard(
-      id: FinanceViewModel.integer(card['id']),
+      id: FinanceController.integer(card['id']),
       name: data['name']!,
       limitCents: centsFrom(data['limit']!),
     );
@@ -73,7 +73,7 @@ class CardsPage extends StatelessWidget {
           'O cartão e todas as compras e parcelas vinculadas a ele serão removidos.',
     );
     if (!deleted || !context.mounted) return;
-    await vm.delete('cards', FinanceViewModel.integer(card['id']));
+    await vm.delete('cards', FinanceController.integer(card['id']));
   }
 
   Future<void> _editCardExpense(
@@ -82,26 +82,26 @@ class CardsPage extends StatelessWidget {
     List<Map<String, Object?>>? purchase,
   }) async {
     final editPurchase = purchase != null;
-    final recurring = FinanceViewModel.integer(expense['recurring']) == 1;
+    final recurring = FinanceController.integer(expense['recurring']) == 1;
     final amountCents = editPurchase
         ? recurring
-              ? FinanceViewModel.integer(expense['amount_cents'])
+              ? FinanceController.integer(expense['amount_cents'])
               : purchase.fold(
                   0,
                   (sum, item) =>
-                      sum + FinanceViewModel.integer(item['amount_cents']),
+                      sum + FinanceController.integer(item['amount_cents']),
                 )
-        : FinanceViewModel.integer(expense['amount_cents']);
+        : FinanceController.integer(expense['amount_cents']);
     final options = vm
         .categoriesFor('cards')
         .map(
           (category) => (
-            value: FinanceViewModel.string(category['name']),
-            label: FinanceViewModel.string(category['name']),
+            value: FinanceController.string(category['name']),
+            label: FinanceController.string(category['name']),
           ),
         )
         .toList();
-    final selectedCategory = FinanceViewModel.string(expense['category']);
+    final selectedCategory = FinanceController.string(expense['category']);
     if (selectedCategory.isNotEmpty &&
         !options.any((option) => option.value == selectedCategory)) {
       options.add((value: selectedCategory, label: selectedCategory));
@@ -130,7 +130,7 @@ class CardsPage extends StatelessWidget {
         SmartFieldSpec(
           key: 'title',
           label: 'Descrição da compra',
-          initial: FinanceViewModel.string(expense['title']),
+          initial: FinanceController.string(expense['title']),
         ),
         SmartFieldSpec(
           key: 'amount',
@@ -152,23 +152,23 @@ class CardsPage extends StatelessWidget {
     }
     if (editPurchase &&
         purchase.length == 1 &&
-        FinanceViewModel.string(expense['purchase_id']).isEmpty) {
+        FinanceController.string(expense['purchase_id']).isEmpty) {
       await vm.updateCardExpense(
-        id: FinanceViewModel.integer(expense['id']),
+        id: FinanceController.integer(expense['id']),
         title: data['title'].toString().trim(),
         category: data['category'].toString(),
         amountCents: centsFrom(data['amount'].toString()),
       );
     } else if (editPurchase) {
       await vm.updateCardPurchase(
-        purchaseId: FinanceViewModel.string(expense['purchase_id']),
+        purchaseId: FinanceController.string(expense['purchase_id']),
         title: data['title'].toString().trim(),
         category: data['category'].toString(),
         totalCents: centsFrom(data['amount'].toString()),
       );
     } else {
       await vm.updateCardExpense(
-        id: FinanceViewModel.integer(expense['id']),
+        id: FinanceController.integer(expense['id']),
         title: data['title'].toString().trim(),
         category: data['category'].toString(),
         amountCents: centsFrom(data['amount'].toString()),
@@ -186,7 +186,7 @@ class CardsPage extends StatelessWidget {
       message: 'Somente esta parcela será removida da fatura.',
     );
     if (!deleted || !context.mounted) return;
-    await vm.delete('card_expenses', FinanceViewModel.integer(expense['id']));
+    await vm.delete('card_expenses', FinanceController.integer(expense['id']));
   }
 
   Future<void> _deleteCardPurchase(
@@ -203,7 +203,7 @@ class CardsPage extends StatelessWidget {
     if (purchaseId.isEmpty && singleExpense != null) {
       await vm.delete(
         'card_expenses',
-        FinanceViewModel.integer(singleExpense['id']),
+        FinanceController.integer(singleExpense['id']),
       );
     } else {
       await vm.deleteCardPurchase(purchaseId);
@@ -220,15 +220,15 @@ class CardsPage extends StatelessWidget {
     final cardOptions = vm.cards
         .map(
           (c) =>
-              (value: '${c['id']}', label: FinanceViewModel.string(c['name'])),
+              (value: '${c['id']}', label: FinanceController.string(c['name'])),
         )
         .toList();
     final categoryOptions = vm
         .categoriesFor('cards')
         .map(
           (c) => (
-            value: FinanceViewModel.string(c['name']),
-            label: FinanceViewModel.string(c['name']),
+            value: FinanceController.string(c['name']),
+            label: FinanceController.string(c['name']),
           ),
         )
         .toList();
@@ -290,7 +290,7 @@ class CardsPage extends StatelessWidget {
     await vm.addCardPurchase(
       cardId:
           int.tryParse(data['card'].toString()) ??
-          FinanceViewModel.integer(vm.cards.first['id']),
+          FinanceController.integer(vm.cards.first['id']),
       title: data['title'].toString().trim(),
       category: data['category']?.toString() ?? 'Outros',
       totalCents: centsFrom(data['amount'].toString()),
@@ -348,25 +348,25 @@ class CardsPage extends StatelessWidget {
           ),
         ),
         ...vm.cards.map((card) {
-          final id = FinanceViewModel.integer(card['id']);
-          final limit = FinanceViewModel.integer(card['limit_cents']);
+          final id = FinanceController.integer(card['id']);
+          final limit = FinanceController.integer(card['limit_cents']);
           final outstanding = vm.cardOutstanding(id);
           final available = (limit - outstanding).clamp(0, limit);
           final cardExpenses =
               vm.cardExpenses
                   .where(
                     (expense) =>
-                        FinanceViewModel.integer(expense['card_id']) == id,
+                        FinanceController.integer(expense['card_id']) == id,
                   )
                   .toList()
                 ..sort(
-                  (a, b) => FinanceViewModel.string(
+                  (a, b) => FinanceController.string(
                     a['month'],
-                  ).compareTo(FinanceViewModel.string(b['month'])),
+                  ).compareTo(FinanceController.string(b['month'])),
                 );
           final purchases = <String, List<Map<String, Object?>>>{};
           for (final expense in cardExpenses) {
-            final purchaseId = FinanceViewModel.string(expense['purchase_id']);
+            final purchaseId = FinanceController.string(expense['purchase_id']);
             final key = purchaseId.isEmpty
                 ? 'unlinked-${expense['id']}'
                 : purchaseId;
@@ -377,7 +377,7 @@ class CardsPage extends StatelessWidget {
             final installments = entry.value
                 .where(
                   (expense) =>
-                      FinanceViewModel.string(expense['month']) == vm.month,
+                      FinanceController.string(expense['month']) == vm.month,
                 )
                 .toList();
             if (installments.isNotEmpty) {
@@ -386,7 +386,7 @@ class CardsPage extends StatelessWidget {
           }
           final categories = <String, List<String>>{};
           for (final entry in monthPurchases.entries) {
-            final name = FinanceViewModel.string(
+            final name = FinanceController.string(
               purchases[entry.key]!.first['category'],
             );
             final category = name.isEmpty ? 'Outros' : name;
@@ -402,7 +402,7 @@ class CardsPage extends StatelessWidget {
               child: ExpansionTile(
                 leading: const Icon(Icons.credit_card, color: AppTheme.lime),
                 title: Text(
-                  FinanceViewModel.string(card['name']),
+                  FinanceController.string(card['name']),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
@@ -501,12 +501,17 @@ class CardsPage extends StatelessWidget {
     Map<String, List<Map<String, Object?>>> purchases,
     Map<String, List<Map<String, Object?>>> monthPurchases,
   ) {
-    final total = purchaseKeys.fold<int>(0, (sum, key) =>
-        sum + monthPurchases[key]!.fold<int>(
-          0,
-          (subtotal, installment) =>
-              subtotal + FinanceViewModel.integer(installment['amount_cents']),
-        ));
+    final total = purchaseKeys.fold<int>(
+      0,
+      (sum, key) =>
+          sum +
+          monthPurchases[key]!.fold<int>(
+            0,
+            (subtotal, installment) =>
+                subtotal +
+                FinanceController.integer(installment['amount_cents']),
+          ),
+    );
     return Container(
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
@@ -517,14 +522,20 @@ class CardsPage extends StatelessWidget {
         children: [
           ListTile(
             dense: true,
-            title: Text(category, style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(
+              category,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             subtitle: Text(
               '${purchaseKeys.length} ${purchaseKeys.length == 1 ? 'compra' : 'compras'} nesta fatura',
               style: const TextStyle(color: AppTheme.muted, fontSize: 12),
             ),
             trailing: Text(
               money(total),
-              style: const TextStyle(color: AppTheme.lime, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: AppTheme.lime,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           for (final key in purchaseKeys)
@@ -547,10 +558,10 @@ class CardsPage extends StatelessWidget {
     String purchaseId,
   ) {
     final first = purchase.first;
-    final recurring = FinanceViewModel.integer(first['recurring']) == 1;
+    final recurring = FinanceController.integer(first['recurring']) == 1;
     final total = visibleInstallments.fold(
       0,
-      (sum, item) => sum + FinanceViewModel.integer(item['amount_cents']),
+      (sum, item) => sum + FinanceController.integer(item['amount_cents']),
     );
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -563,11 +574,11 @@ class CardsPage extends StatelessWidget {
           ListTile(
             dense: true,
             title: Text(
-              FinanceViewModel.string(first['title']),
+              FinanceController.string(first['title']),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             subtitle: Text(
-              '${FinanceViewModel.string(first['category'])} • ${recurring ? 'Assinatura' : '${purchase.length} parcelas'}',
+              '${FinanceController.string(first['category'])} • ${recurring ? 'Assinatura' : '${purchase.length} parcelas'}',
               style: const TextStyle(color: AppTheme.muted),
             ),
             trailing: Row(
@@ -576,7 +587,7 @@ class CardsPage extends StatelessWidget {
                 Text(
                   money(
                     recurring
-                        ? FinanceViewModel.integer(first['amount_cents'])
+                        ? FinanceController.integer(first['amount_cents'])
                         : total,
                   ),
                   style: const TextStyle(
@@ -622,14 +633,14 @@ class CardsPage extends StatelessWidget {
     BuildContext context,
     Map<String, Object?> installment,
   ) {
-    final id = FinanceViewModel.integer(installment['id']);
-    final purchaseId = FinanceViewModel.string(installment['purchase_id']);
+    final id = FinanceController.integer(installment['id']);
+    final purchaseId = FinanceController.string(installment['purchase_id']);
     final purchase = _installmentsFor(installment);
-    final paid = FinanceViewModel.integer(installment['paid']) == 1;
-    final recurring = FinanceViewModel.integer(installment['recurring']) == 1;
+    final paid = FinanceController.integer(installment['paid']) == 1;
+    final recurring = FinanceController.integer(installment['recurring']) == 1;
     final description = recurring
-        ? 'Assinatura • ${monthLabel(FinanceViewModel.string(installment['month']))}'
-        : 'Parcela ${installment['installment_index']} de ${installment['installment_count']} • ${monthLabel(FinanceViewModel.string(installment['month']))}';
+        ? 'Assinatura • ${monthLabel(FinanceController.string(installment['month']))}'
+        : 'Parcela ${installment['installment_index']} de ${installment['installment_count']} • ${monthLabel(FinanceController.string(installment['month']))}';
     return ListTile(
       dense: true,
       leading: Checkbox(
@@ -645,7 +656,7 @@ class CardsPage extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            money(FinanceViewModel.integer(installment['amount_cents'])),
+            money(FinanceController.integer(installment['amount_cents'])),
             style: const TextStyle(
               color: AppTheme.lime,
               fontWeight: FontWeight.bold,
@@ -697,17 +708,17 @@ class CardsPage extends StatelessWidget {
   List<Map<String, Object?>> _installmentsFor(
     Map<String, Object?> installment,
   ) {
-    final purchaseId = FinanceViewModel.string(installment['purchase_id']);
+    final purchaseId = FinanceController.string(installment['purchase_id']);
     if (purchaseId.isEmpty) return [installment];
     return vm.cardExpenses
         .where(
-          (item) => FinanceViewModel.string(item['purchase_id']) == purchaseId,
+          (item) => FinanceController.string(item['purchase_id']) == purchaseId,
         )
         .toList()
       ..sort(
-        (a, b) => FinanceViewModel.integer(
+        (a, b) => FinanceController.integer(
           a['installment_index'],
-        ).compareTo(FinanceViewModel.integer(b['installment_index'])),
+        ).compareTo(FinanceController.integer(b['installment_index'])),
       );
   }
 

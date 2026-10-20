@@ -1,33 +1,28 @@
 import 'package:circle_nav_bar/circle_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/database/app_database.dart';
 import 'core/theme/app_theme.dart';
-import 'features/cards/cards_page.dart';
-import 'features/dashboard/dashboard_page.dart';
-import 'features/finance_view_model.dart';
-import 'features/goals/goals_page.dart';
-import 'features/income/income_page.dart';
-import 'features/planning/planning_page.dart';
-import 'features/settings/settings_page.dart';
+import 'features/cards/view/cards_page.dart';
+import 'features/cards/viewmodel/cards_view_model.dart';
 
-void main() => runApp(const FinanceApp());
+import 'features/dashboard/view/dashboard_page.dart';
+import 'features/dashboard/viewmodel/dashboard_view_model.dart';
+import 'core/providers/app_providers.dart';
+import 'features/goals/view/goals_page.dart';
+import 'features/goals/viewmodel/goals_view_model.dart';
+import 'features/income/view/income_page.dart';
+import 'features/income/viewmodel/income_view_model.dart';
+import 'features/planning/view/planning_page.dart';
+import 'features/planning/viewmodel/planning_view_model.dart';
+import 'features/settings/view/settings_page.dart';
+import 'features/settings/viewmodel/settings_view_model.dart';
 
-class FinanceApp extends StatefulWidget {
+void main() => runApp(const ProviderScope(child: FinanceApp()));
+
+class FinanceApp extends StatelessWidget {
   const FinanceApp({super.key});
-  @override
-  State<FinanceApp> createState() => _FinanceAppState();
-}
-
-class _FinanceAppState extends State<FinanceApp> {
-  late final FinanceViewModel vm = FinanceViewModel(AppDatabase.instance)
-    ..load();
-  @override
-  void dispose() {
-    vm.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -37,10 +32,11 @@ class _FinanceAppState extends State<FinanceApp> {
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     supportedLocales: const [Locale('pt', 'BR')],
     theme: AppTheme.dark,
-    home: AnimatedBuilder(
-      animation: vm,
-      builder: (context, _) =>
-          vm.loading ? const MedPlannerSplash() : FinanceShell(vm: vm),
+    home: Consumer(
+      builder: (context, ref, _) {
+        final state = ref.watch(financeProvider);
+        return state.loading ? const MedPlannerSplash() : const FinanceShell();
+      },
     ),
   );
 }
@@ -76,14 +72,13 @@ class MedPlannerSplash extends StatelessWidget {
   );
 }
 
-class FinanceShell extends StatefulWidget {
-  const FinanceShell({required this.vm, super.key});
-  final FinanceViewModel vm;
+class FinanceShell extends ConsumerStatefulWidget {
+  const FinanceShell({super.key});
   @override
-  State<FinanceShell> createState() => _FinanceShellState();
+  ConsumerState<FinanceShell> createState() => _FinanceShellState();
 }
 
-class _FinanceShellState extends State<FinanceShell> {
+class _FinanceShellState extends ConsumerState<FinanceShell> {
   int selected = 2;
   bool _tourCheckStarted = false;
   static const titles = [
@@ -103,10 +98,11 @@ class _FinanceShellState extends State<FinanceShell> {
   Future<void> _maybeShowTour() async {
     if (_tourCheckStarted) return;
     _tourCheckStarted = true;
-    final shouldShow = await widget.vm.shouldShowTaxInvestmentTour();
+    final controller = ref.read(financeProvider.notifier);
+    final shouldShow = await controller.shouldShowTaxInvestmentTour();
     if (!mounted || !shouldShow) return;
     await _showTaxInvestmentTour(context);
-    if (mounted) await widget.vm.markTaxInvestmentTourSeen();
+    if (mounted) await controller.markTaxInvestmentTourSeen();
   }
 
   Future<void> _showTaxInvestmentTour(BuildContext context) async {
@@ -200,12 +196,19 @@ class _FinanceShellState extends State<FinanceShell> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(financeProvider);
+    final incomeVm = ref.read(incomeViewModelProvider);
+    final planningVm = ref.read(planningViewModelProvider);
+    final dashboardVm = ref.read(dashboardViewModelProvider);
+    final cardsVm = ref.read(cardsViewModelProvider);
+    final goalsVm = ref.read(goalsViewModelProvider);
+    final settingsVm = ref.read(settingsViewModelProvider);
     final pages = [
-      IncomePage(vm: widget.vm),
-      PlanningPage(vm: widget.vm),
-      DashboardPage(vm: widget.vm),
-      CardsPage(vm: widget.vm),
-      GoalsPage(vm: widget.vm),
+      IncomePage(vm: incomeVm),
+      PlanningPage(vm: planningVm),
+      DashboardPage(vm: dashboardVm),
+      CardsPage(vm: cardsVm),
+      GoalsPage(vm: goalsVm),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -218,7 +221,7 @@ class _FinanceShellState extends State<FinanceShell> {
             tooltip: 'Configurações e backup',
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => SettingsPage(vm: widget.vm)),
+              MaterialPageRoute(builder: (_) => SettingsPage(vm: settingsVm)),
             ),
             icon: const Icon(Icons.tune),
           ),

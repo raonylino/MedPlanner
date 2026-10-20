@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_theme.dart';
-import '../../shared/ui.dart';
-import '../finance_view_model.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/ui.dart';
+import '../viewmodel/income_view_model.dart';
 
 class IncomePage extends StatefulWidget {
   const IncomePage({required this.vm, super.key});
-  final FinanceViewModel vm;
+  final FinanceController vm;
   @override
   State<IncomePage> createState() => _IncomePageState();
 }
 
 class _IncomePageState extends State<IncomePage> {
   int tab = 0;
-  FinanceViewModel get vm => widget.vm;
+  FinanceController get vm => widget.vm;
 
   Future<void> _editOrAdd(
     BuildContext context, {
@@ -20,18 +20,18 @@ class _IncomePageState extends State<IncomePage> {
     Map<String, Object?>? savedService,
   }) async {
     final currentMonth = vm.month;
-    final initialDate = FinanceViewModel.string(
+    final initialDate = FinanceController.string(
       existing?['date'] ?? DateTime.now().toIso8601String(),
     ).split('T').first;
     final monthOptionsList = monthOptions(monthsBack: 12, monthsForward: 60);
-    final name = FinanceViewModel.string(
+    final name = FinanceController.string(
       existing?['service'] ?? savedService?['name'],
     );
     final unit = existing?['unit_cents'] ?? savedService?['unit_cents'];
     final defaultInvestmentIds = vm.investments
-        .map((investment) => FinanceViewModel.string(investment['id']))
+        .map((investment) => FinanceController.string(investment['id']))
         .join(',');
-    final storedInvestmentIds = FinanceViewModel.string(
+    final storedInvestmentIds = FinanceController.string(
       existing?['investment_ids'],
     );
     final selectedInvestmentIds = existing == null || storedInvestmentIds == '*'
@@ -57,7 +57,7 @@ class _IncomePageState extends State<IncomePage> {
           label: 'Valor de cada plantão',
           initial: unit == null
               ? ''
-              : (FinanceViewModel.integer(unit) / 100)
+              : (FinanceController.integer(unit) / 100)
                     .toStringAsFixed(2)
                     .replaceAll('.', ','),
           keyboard: TextInputType.number,
@@ -71,7 +71,8 @@ class _IncomePageState extends State<IncomePage> {
         SmartFieldSpec(
           key: 'tax',
           label: 'Aplicar imposto?',
-          initial: '${FinanceViewModel.integer(existing?['tax_applies']) == 1}',
+          initial:
+              '${FinanceController.integer(existing?['tax_applies']) == 1}',
           kind: SmartFieldKind.toggle,
         ),
         SmartFieldSpec(
@@ -80,12 +81,12 @@ class _IncomePageState extends State<IncomePage> {
           initial: selectedInvestmentIds,
           kind: SmartFieldKind.multiSelect,
           options: vm.investments.map((investment) {
-            final mode = FinanceViewModel.string(investment['mode']);
+            final mode = FinanceController.string(investment['mode']);
             final amount = mode == 'percent'
                 ? '${investment['value']}%'
-                : money(FinanceViewModel.integer(investment['value']));
+                : money(FinanceController.integer(investment['value']));
             return (
-              value: FinanceViewModel.string(investment['id']),
+              value: FinanceController.string(investment['id']),
               label: '${investment['name']} • $amount',
             );
           }).toList(),
@@ -93,7 +94,7 @@ class _IncomePageState extends State<IncomePage> {
         SmartFieldSpec(
           key: 'receive_month',
           label: 'Mês de recebimento',
-          initial: FinanceViewModel.string(
+          initial: FinanceController.string(
             existing?['receive_month'] ?? currentMonth,
           ),
           kind: SmartFieldKind.dropdown,
@@ -139,7 +140,7 @@ class _IncomePageState extends State<IncomePage> {
       );
     } else {
       await vm.updateIncome(
-        id: FinanceViewModel.integer(existing['id']),
+        id: FinanceController.integer(existing['id']),
         service: payload['service'] as String,
         quantity: payload['quantity'] as double,
         unitCents: payload['unitCents'] as int,
@@ -157,10 +158,10 @@ class _IncomePageState extends State<IncomePage> {
     final items = vm.incomes.where((entry) {
       if (receivedTab) return entry['receive_month'] == vm.month;
       final workDate = DateTime.tryParse(
-        FinanceViewModel.string(entry['date']),
+        FinanceController.string(entry['date']),
       );
       return workDate != null &&
-          FinanceViewModel.monthFromDate(workDate) == vm.month;
+          FinanceController.monthFromDate(workDate) == vm.month;
     }).toList();
     return ListView(
       padding: const EdgeInsets.only(bottom: 28),
@@ -217,7 +218,7 @@ class _IncomePageState extends State<IncomePage> {
               children: vm.services
                   .map(
                     (service) => ActionChip(
-                      label: Text(FinanceViewModel.string(service['name'])),
+                      label: Text(FinanceController.string(service['name'])),
                       onPressed: () =>
                           _editOrAdd(context, savedService: service),
                     ),
@@ -249,11 +250,11 @@ class _IncomePageState extends State<IncomePage> {
           ),
         ),
         ...items.map((entry) {
-          final id = FinanceViewModel.integer(entry['id']);
-          final received = FinanceViewModel.integer(entry['received']) == 1;
+          final id = FinanceController.integer(entry['id']);
+          final received = FinanceController.integer(entry['received']) == 1;
           final value = vm.incomeValue(entry);
-          final date = FinanceViewModel.string(entry['date']).split('T').first;
-          final quantity = FinanceViewModel.decimal(entry['quantity']);
+          final date = FinanceController.string(entry['date']).split('T').first;
+          final quantity = FinanceController.decimal(entry['quantity']);
           final quantityLabel = quantity == quantity.truncateToDouble()
               ? quantity.toInt().toString()
               : quantity.toString().replaceAll('.', ',');
@@ -270,11 +271,11 @@ class _IncomePageState extends State<IncomePage> {
                 ),
               ),
               title: Text(
-                FinanceViewModel.string(entry['service']),
+                FinanceController.string(entry['service']),
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
-                '${dateLabel(date)} • $quantityLabel ${quantity == 1 ? 'plantão' : 'plantões'}${FinanceViewModel.integer(entry['tax_applies']) == 1 ? ' • imposto aplicado' : ''}',
+                '${dateLabel(date)} • $quantityLabel ${quantity == 1 ? 'plantão' : 'plantões'}${FinanceController.integer(entry['tax_applies']) == 1 ? ' • imposto aplicado' : ''}',
                 style: const TextStyle(color: AppTheme.muted),
               ),
               trailing: Row(

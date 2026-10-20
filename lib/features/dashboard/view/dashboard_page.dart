@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_theme.dart';
-import '../../shared/ui.dart';
-import '../finance_view_model.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/ui.dart';
+import '../viewmodel/dashboard_view_model.dart';
 
 class DashboardPage extends StatelessWidget {
   const DashboardPage({required this.vm, super.key});
-  final FinanceViewModel vm;
+  final FinanceController vm;
   @override
   Widget build(BuildContext context) {
     final net = vm.incomeTotal - vm.plannedTotal - vm.cardTotal;
@@ -67,7 +67,7 @@ class DashboardPage extends StatelessWidget {
           vm.cardTotal,
           vm.cards.fold(
             0,
-            (a, c) => a + FinanceViewModel.integer(c['limit_cents']),
+            (a, c) => a + FinanceController.integer(c['limit_cents']),
           ),
         ),
         const SizedBox(height: 22),
@@ -80,7 +80,7 @@ class DashboardPage extends StatelessWidget {
               ),
             ),
             Text(
-              '${vm.expenses.where((e) => e['month'] == vm.month && FinanceViewModel.integer(e['paid']) == 0).length} pendentes',
+              '${vm.expenses.where((e) => e['month'] == vm.month && FinanceController.integer(e['paid']) == 0).length} pendentes',
               style: const TextStyle(color: AppTheme.muted),
             ),
           ],
@@ -93,10 +93,10 @@ class DashboardPage extends StatelessWidget {
               (e) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: RecordTile(
-                  title: FinanceViewModel.string(e['title']),
+                  title: FinanceController.string(e['title']),
                   subtitle:
-                      '${e['category']} • ${FinanceViewModel.integer(e['paid']) == 1 ? 'Pago' : 'Previsto'}',
-                  trailing: money(FinanceViewModel.integer(e['amount_cents'])),
+                      '${e['category']} • ${FinanceController.integer(e['paid']) == 1 ? 'Pago' : 'Previsto'}',
+                  trailing: money(FinanceController.integer(e['amount_cents'])),
                 ),
               ),
             ),
@@ -206,9 +206,9 @@ class DashboardPage extends StatelessWidget {
               final isPercent = investment['mode'] == 'percent';
               final ruleValue = isPercent
                   ? '${investment['value']}%'
-                  : '${money(FinanceViewModel.integer(investment['value']))} fixos';
+                  : '${money(FinanceController.integer(investment['value']))} fixos';
               final monthlyValue = vm.monthlyInvestmentAmount(
-                FinanceViewModel.integer(investment['id']),
+                FinanceController.integer(investment['id']),
                 forMonth: vm.month,
               );
               return Padding(
@@ -226,7 +226,7 @@ class DashboardPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            FinanceViewModel.string(investment['name']),
+                            FinanceController.string(investment['name']),
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           Text(

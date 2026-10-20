@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_theme.dart';
-import '../../shared/ui.dart';
-import '../finance_view_model.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/ui.dart';
+import '../viewmodel/planning_view_model.dart';
 
 class PlanningPage extends StatelessWidget {
   const PlanningPage({required this.vm, super.key});
-  final FinanceViewModel vm;
+  final FinanceController vm;
 
   Future<void> _editOrAdd(
     BuildContext context, {
     Map<String, Object?>? existing,
   }) async {
-    final targetMonth = FinanceViewModel.string(existing?['month'] ?? vm.month);
+    final targetMonth = FinanceController.string(
+      existing?['month'] ?? vm.month,
+    );
     final firstDay = DateTime.tryParse('$targetMonth-01') ?? DateTime.now();
     final lastDay = DateTime(firstDay.year, firstDay.month + 1, 0);
     final today = DateTime.now();
@@ -23,17 +25,17 @@ class PlanningPage extends StatelessWidget {
         : 1;
     final initialDueDate = existing == null
         ? '${firstDay.year}-${firstDay.month.toString().padLeft(2, '0')}-${defaultDay.toString().padLeft(2, '0')}'
-        : FinanceViewModel.string(existing['due_date']);
+        : FinanceController.string(existing['due_date']);
     final options = vm
         .categoriesFor('planning')
         .map(
           (c) => (
-            value: FinanceViewModel.string(c['name']),
-            label: FinanceViewModel.string(c['name']),
+            value: FinanceController.string(c['name']),
+            label: FinanceController.string(c['name']),
           ),
         )
         .toList();
-    final selectedCategory = FinanceViewModel.string(existing?['category']);
+    final selectedCategory = FinanceController.string(existing?['category']);
     if (selectedCategory.isNotEmpty &&
         !options.any((option) => option.value == selectedCategory)) {
       options.add((value: selectedCategory, label: selectedCategory));
@@ -62,14 +64,14 @@ class PlanningPage extends StatelessWidget {
         SmartFieldSpec(
           key: 'title',
           label: 'Nome da despesa',
-          initial: FinanceViewModel.string(existing?['title']),
+          initial: FinanceController.string(existing?['title']),
         ),
         SmartFieldSpec(
           key: 'amount',
           label: 'Valor',
           initial: existing == null
               ? ''
-              : (FinanceViewModel.integer(existing['amount_cents']) / 100)
+              : (FinanceController.integer(existing['amount_cents']) / 100)
                     .toStringAsFixed(2)
                     .replaceAll('.', ','),
           keyboard: TextInputType.number,
@@ -126,7 +128,7 @@ class PlanningPage extends StatelessWidget {
       }
     } else {
       final remindersEnabled = await vm.updateExpense(
-        id: FinanceViewModel.integer(existing['id']),
+        id: FinanceController.integer(existing['id']),
         title: title,
         category: category,
         cents: cents,
@@ -148,7 +150,7 @@ class PlanningPage extends StatelessWidget {
       message: 'Esta despesa planejada será removida permanentemente.',
     );
     if (!deleted || !context.mounted) return;
-    await vm.delete('expenses', FinanceViewModel.integer(expense['id']));
+    await vm.delete('expenses', FinanceController.integer(expense['id']));
   }
 
   @override
@@ -157,7 +159,7 @@ class PlanningPage extends StatelessWidget {
     final grouped = <String, List<Map<String, Object?>>>{};
     for (final item in items) {
       grouped
-          .putIfAbsent(FinanceViewModel.string(item['category']), () => [])
+          .putIfAbsent(FinanceController.string(item['category']), () => [])
           .add(item);
     }
     return ListView(
@@ -220,7 +222,7 @@ class PlanningPage extends StatelessWidget {
         ...grouped.entries.map((group) {
           final subtotal = group.value.fold(
             0,
-            (sum, e) => sum + FinanceViewModel.integer(e['amount_cents']),
+            (sum, e) => sum + FinanceController.integer(e['amount_cents']),
           );
           final percent = vm.plannedTotal == 0
               ? 0
@@ -263,9 +265,9 @@ class PlanningPage extends StatelessWidget {
                   ),
                 ),
                 ...group.value.map((e) {
-                  final id = FinanceViewModel.integer(e['id']);
-                  final paid = FinanceViewModel.integer(e['paid']) == 1;
-                  final dueDate = FinanceViewModel.string(e['due_date']);
+                  final id = FinanceController.integer(e['id']);
+                  final paid = FinanceController.integer(e['paid']) == 1;
+                  final dueDate = FinanceController.string(e['due_date']);
                   return Card(
                     child: CheckboxListTile(
                       value: paid,
@@ -280,7 +282,7 @@ class PlanningPage extends StatelessWidget {
                         }
                       },
                       controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(FinanceViewModel.string(e['title'])),
+                      title: Text(FinanceController.string(e['title'])),
                       subtitle: Text(
                         [
                           paid ? 'Pago' : 'Previsto',
@@ -293,7 +295,7 @@ class PlanningPage extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            money(FinanceViewModel.integer(e['amount_cents'])),
+                            money(FinanceController.integer(e['amount_cents'])),
                             style: const TextStyle(
                               color: AppTheme.lime,
                               fontWeight: FontWeight.bold,
