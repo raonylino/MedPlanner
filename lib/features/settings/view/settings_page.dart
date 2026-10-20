@@ -205,13 +205,13 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Consumer(
     builder: (context, ref, _) {
-      ref.watch(financeProvider);
+      final financeState = ref.watch(financeProvider);
       return Scaffold(
         appBar: AppBar(title: const Text('Configurações')),
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            const Text(
+            Text(
               'Cálculos',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -262,6 +262,26 @@ class SettingsPage extends StatelessWidget {
             ),
             const SizedBox(height: 22),
             const Text(
+              'Aparência',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: SwitchListTile(
+                secondary: const Icon(
+                  Icons.light_mode_outlined,
+                  color: AppTheme.lime,
+                ),
+                title: const Text('Tema claro'),
+                subtitle: const Text(
+                  'Use o aplicativo com fundo claro e mantenha o verde como cor principal',
+                ),
+                value: financeState.lightTheme,
+                onChanged: vm.setLightTheme,
+              ),
+            ),
+            const SizedBox(height: 22),
+            const Text(
               'Backup e exportação',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -306,7 +326,7 @@ class SettingsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'Os dados ficam neste aparelho. Guarde uma cópia do backup em local seguro; a restauração substitui os dados atuais.',
               style: TextStyle(color: AppTheme.muted, fontSize: 12),
             ),

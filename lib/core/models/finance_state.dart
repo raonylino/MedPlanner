@@ -5,6 +5,7 @@ import '../utils/finance_values.dart';
 class FinanceState {
   const FinanceState({
     required this.loading,
+    required this.lightTheme,
     required this.month,
     required this.expenses,
     required this.incomes,
@@ -19,6 +20,7 @@ class FinanceState {
 
   factory FinanceState.initial() => FinanceState(
     loading: true,
+    lightTheme: false,
     month: FinanceValues.monthFromDate(DateTime.now()),
     expenses: const [],
     incomes: const [],
@@ -32,6 +34,7 @@ class FinanceState {
   );
 
   final bool loading;
+  final bool lightTheme;
   final String month;
   final List<Map<String, Object?>> expenses;
   final List<Map<String, Object?>> incomes;
@@ -45,6 +48,7 @@ class FinanceState {
 
   FinanceState copyWith({
     bool? loading,
+    bool? lightTheme,
     String? month,
     List<Map<String, Object?>>? expenses,
     List<Map<String, Object?>>? incomes,
@@ -57,6 +61,7 @@ class FinanceState {
     double? taxPercent,
   }) => FinanceState(
     loading: loading ?? this.loading,
+    lightTheme: lightTheme ?? this.lightTheme,
     month: month ?? this.month,
     expenses: expenses ?? this.expenses,
     incomes: incomes ?? this.incomes,

@@ -1,37 +1,52 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppTheme {
-  static const bg = Color(0xFF11131B);
-  static const surface = Color(0xFF1C202B);
-  static const surface2 = Color(0xFF252A36);
   static const lime = Color(0xFFB7F500);
-  static const text = Color(0xFFF5F6F7);
-  static const muted = Color(0xFFA8ACB8);
+  static const onLime = Color(0xFF11131B);
+  static bool lightMode = false;
 
-  static ThemeData get dark => ThemeData(
-    brightness: Brightness.dark,
+  static Color get bg =>
+      lightMode ? const Color(0xFFF4F6F2) : const Color(0xFF11131B);
+  static Color get surface =>
+      lightMode ? const Color(0xFFFFFFFF) : const Color(0xFF1C202B);
+  static Color get surface2 =>
+      lightMode ? const Color(0xFFE8ECE5) : const Color(0xFF252A36);
+  static Color get text =>
+      lightMode ? const Color(0xFF1D251B) : const Color(0xFFF5F6F7);
+  static Color get muted =>
+      lightMode ? const Color(0xFF626B5F) : const Color(0xFFA8ACB8);
+
+  static ThemeData get dark => _createTheme(Brightness.dark);
+  static ThemeData get light => _createTheme(Brightness.light);
+  static ThemeData get current => lightMode ? light : dark;
+
+  static ThemeData _createTheme(Brightness brightness) => ThemeData(
+    brightness: brightness,
     scaffoldBackgroundColor: bg,
-    colorScheme: const ColorScheme.dark(
+    colorScheme: ColorScheme(
+      brightness: brightness,
       primary: lime,
+      onPrimary: const Color(0xFF11131B),
+      secondary: lime,
+      onSecondary: const Color(0xFF11131B),
+      error: const Color(0xFFB3261E),
+      onError: Colors.white,
       surface: surface,
-      onPrimary: bg,
+      onSurface: text,
     ),
     useMaterial3: true,
     fontFamily: 'Roboto',
     appBarTheme: const AppBarTheme(
-      backgroundColor: bg,
-      foregroundColor: text,
       elevation: 0,
-    ),
+    ).copyWith(backgroundColor: bg, foregroundColor: text),
     cardTheme: const CardThemeData(
-      color: surface,
       elevation: 0,
       margin: EdgeInsets.zero,
-    ),
+    ).copyWith(color: surface),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: surface2,
-      hintStyle: const TextStyle(color: muted),
+      hintStyle: TextStyle(color: muted),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide.none,

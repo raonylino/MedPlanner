@@ -1,6 +1,7 @@
+import 'package:sqflite/sqflite.dart';
+
 import '../core/database/app_database.dart';
 import '../core/notifications/expense_notification_service.dart';
-import 'package:sqflite/sqflite.dart';
 import '../core/utils/finance_values.dart';
 
 /// A command represents one user-requested write operation.
@@ -189,31 +190,103 @@ class FinanceCommands {
     final database = await db.database;
     final purchase = await db.rows(
       'card_expenses',
-      where: 'purchase_id = ?',
-      args: [command.purchaseId],
+      where: command.purchaseId.isEmpty ? 'id = ?' : 'purchase_id = ?',
+      args: [
+        command.purchaseId.isEmpty ? command.expenseId : command.purchaseId,
+      ],
       orderBy: 'installment_index',
     );
     if (purchase.isEmpty) throw StateError('A compra não existe mais.');
     final recurring = FinanceValues.integer(purchase.first['recurring']) == 1;
-    final count = FinanceValues.integer(
-      purchase.first['installment_count'],
-    ).clamp(1, 1000);
+    if (!recurring &&
+        (command.installmentCount < 1 || command.installmentCount > 60)) {
+      throw RangeError.range(
+        command.installmentCount,
+        1,
+        60,
+        'installmentCount',
+      );
+    }
+    final firstDate = recurring
+        ? null
+        : DateTime.tryParse('${command.firstMonth}-01');
+    if (!recurring && firstDate == null) {
+      throw FormatException('Mês da primeira parcela inválido.');
+    }
+    final count = recurring ? purchase.length : command.installmentCount;
     final per = recurring ? command.totalCents : command.totalCents ~/ count;
     final remainder = recurring ? 0 : command.totalCents % count;
+    final existingCount = purchase.fold<int>(
+      0,
+      (maxCount, installment) => maxCount >
+              FinanceValues.integer(installment['installment_count'])
+          ? maxCount
+          : FinanceValues.integer(installment['installment_count']),
+    );
+    final purchaseId = command.purchaseId.isEmpty
+        ? '${command.expenseId}'
+        : command.purchaseId;
+    final installmentsByIndex = {
+      for (final installment in purchase)
+        FinanceValues.integer(installment['installment_index']): installment,
+    };
+    final currentMonth = FinanceValues.monthFromDate(DateTime.now());
     await database.transaction((transaction) async {
+      if (recurring) {
+        for (final installment in purchase) {
+          await transaction.update(
+            'card_expenses',
+            {
+              'title': command.title,
+              'category': command.category,
+              'amount_cents': command.totalCents,
+            },
+            where: 'id = ?',
+            whereArgs: [installment['id']],
+          );
+        }
+        return;
+      }
+
+      for (var index = 1; index <= count; index++) {
+        final date = DateTime(firstDate!.year, firstDate.month + index - 1, 1);
+        final month = FinanceValues.monthFromDate(date);
+        final existing = installmentsByIndex[index];
+        if (existing == null && index <= existingCount) continue;
+        final row = <String, Object?>{
+          'title': command.title,
+          'category': command.category,
+          'amount_cents': per + (index == count ? remainder : 0),
+          'installment_count': count,
+          'installment_index': index,
+          'month': month,
+          'purchase_id': purchaseId,
+        };
+        if (existing == null) {
+          row.addAll({
+            'card_id': FinanceValues.integer(purchase.first['card_id']),
+            'recurring': 0,
+            'paid': month.compareTo(currentMonth) < 0 ? 1 : 0,
+          });
+          await transaction.insert('card_expenses', row);
+        } else {
+          await transaction.update(
+            'card_expenses',
+            row,
+            where: 'id = ?',
+            whereArgs: [existing['id']],
+          );
+        }
+      }
+
       for (final installment in purchase) {
-        final index = FinanceValues.integer(installment['installment_index']);
-        await transaction.update(
-          'card_expenses',
-          {
-            'title': command.title,
-            'category': command.category,
-            'amount_cents':
-                per + (!recurring && index == count ? remainder : 0),
-          },
-          where: 'id = ?',
-          whereArgs: [installment['id']],
-        );
+        if (FinanceValues.integer(installment['installment_index']) > count) {
+          await transaction.delete(
+            'card_expenses',
+            where: 'id = ?',
+            whereArgs: [installment['id']],
+          );
+        }
       }
     });
   }
@@ -378,12 +451,15 @@ class UpdateCardExpenseCommand implements FinanceCommand<void> {
 class UpdateCardPurchaseCommand implements FinanceCommand<void> {
   UpdateCardPurchaseCommand(
     this.purchaseId,
+    this.expenseId,
     this.title,
     this.category,
     this.totalCents,
+    this.firstMonth,
+    this.installmentCount,
   );
-  final String purchaseId, title, category;
-  final int totalCents;
+  final String purchaseId, title, category, firstMonth;
+  final int expenseId, totalCents, installmentCount;
   @override
   Future<void> execute(FinanceCommands commands) =>
       commands._updateCardPurchase(this);

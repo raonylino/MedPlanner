@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/ui.dart';
 import '../viewmodel/planning_view_model.dart';
@@ -74,16 +75,9 @@ class PlanningPage extends StatelessWidget {
               : (FinanceController.integer(existing['amount_cents']) / 100)
                     .toStringAsFixed(2)
                     .replaceAll('.', ','),
-          keyboard: TextInputType.number,
+          keyboard: const TextInputType.numberWithOptions(decimal: true),
         ),
-        SmartFieldSpec(
-          key: 'due_date',
-          label: 'Vencimento',
-          initial: initialDueDate,
-          kind: SmartFieldKind.optionalDate,
-          firstDate: firstDay,
-          lastDate: lastDay,
-        ),
+
         if (existing == null)
           const SmartFieldSpec(
             key: 'repeat_count',
@@ -91,6 +85,17 @@ class PlanningPage extends StatelessWidget {
             initial: '1',
             keyboard: TextInputType.number,
           ),
+        SmartFieldSpec(
+          key: 'due_date',
+          label: 'Vencimento',
+          initial: initialDueDate,
+          kind: SmartFieldKind.optionalDate,
+          firstDate: firstDay,
+          lastDate: lastDay,
+          spacingAfter: 12,
+          helperText:
+              'Com o vencimento definido, você receberá uma notificação no dia e outra um dia antes, se as notificações do aparelho estiverem ativadas.',
+        ),
       ],
     );
     if (data == null ||
@@ -211,7 +216,7 @@ class PlanningPage extends StatelessWidget {
           ),
         ),
         if (grouped.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(32),
             child: Text(
               'Nenhuma despesa planejada para este mês.',
@@ -251,7 +256,7 @@ class PlanningPage extends StatelessWidget {
                       ),
                       Text(
                         '$percent%',
-                        style: const TextStyle(color: AppTheme.muted),
+                        style: TextStyle(color: AppTheme.muted),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -289,7 +294,7 @@ class PlanningPage extends StatelessWidget {
                           if (dueDate.isNotEmpty)
                             'Vence em ${dateLabel(dueDate)}',
                         ].join(' • '),
-                        style: const TextStyle(color: AppTheme.muted),
+                        style: TextStyle(color: AppTheme.muted),
                       ),
                       secondary: Row(
                         mainAxisSize: MainAxisSize.min,

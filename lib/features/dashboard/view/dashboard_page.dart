@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/ui.dart';
 import '../viewmodel/dashboard_view_model.dart';
@@ -12,7 +13,7 @@ class DashboardPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       children: [
-        const Text(
+        Text(
           'Seu resumo mensal',
           style: TextStyle(color: AppTheme.muted),
         ),
@@ -69,6 +70,7 @@ class DashboardPage extends StatelessWidget {
             0,
             (a, c) => a + FinanceController.integer(c['limit_cents']),
           ),
+          details: _cardCategoryBreakdown(),
         ),
         const SizedBox(height: 22),
         Row(
@@ -81,7 +83,7 @@ class DashboardPage extends StatelessWidget {
             ),
             Text(
               '${vm.expenses.where((e) => e['month'] == vm.month && FinanceController.integer(e['paid']) == 0).length} pendentes',
-              style: const TextStyle(color: AppTheme.muted),
+              style: TextStyle(color: AppTheme.muted),
             ),
           ],
         ),
@@ -101,7 +103,7 @@ class DashboardPage extends StatelessWidget {
               ),
             ),
         if (vm.expenses.isEmpty && vm.cardExpenses.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(20),
             child: Text(
               'Adicione suas primeiras despesas para ver o planejamento aqui.',
@@ -112,7 +114,7 @@ class DashboardPage extends StatelessWidget {
         const SizedBox(height: 20),
         Text(
           'Total de metas: ${money(vm.goalTotal)}',
-          style: const TextStyle(color: AppTheme.muted),
+          style: TextStyle(color: AppTheme.muted),
         ),
       ],
     );
@@ -134,7 +136,7 @@ class DashboardPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Impostos e investimentos',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
@@ -164,14 +166,14 @@ class DashboardPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 5),
-          const Text(
+          Text(
             'Soma dos impostos previstos para o ano selecionado.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12),
           ),
           const SizedBox(height: 14),
           Text(
             'Valores de ${monthLabel(vm.month)}',
-            style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            style: TextStyle(color: AppTheme.muted, fontSize: 12),
           ),
           const SizedBox(height: 8),
           Row(
@@ -194,7 +196,7 @@ class DashboardPage extends StatelessWidget {
             ],
           ),
           if (vm.investments.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
                 'Nenhuma regra de investimento cadastrada.',
@@ -231,7 +233,7 @@ class DashboardPage extends StatelessWidget {
                           ),
                           Text(
                             ruleValue,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppTheme.muted,
                               fontSize: 12,
                             ),
@@ -251,7 +253,7 @@ class DashboardPage extends StatelessWidget {
               );
             }),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'O imposto e os investimentos acima consideram apenas os recebimentos previstos para o mês selecionado.',
             style: TextStyle(color: AppTheme.muted, fontSize: 12),
           ),
@@ -260,7 +262,13 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _progress(BuildContext context, String label, int value, int total) {
+  Widget _progress(
+    BuildContext context,
+    String label,
+    int value,
+    int total, {
+    Widget? details,
+  }) {
     final fraction = total <= 0 ? 0.0 : (value / total).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(16),
@@ -294,10 +302,93 @@ class DashboardPage extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'de ${money(total)}',
-            style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+            style: TextStyle(color: AppTheme.muted, fontSize: 12),
           ),
+          if (details != null) ...[const SizedBox(height: 12), details],
         ],
       ),
+    );
+  }
+
+  Widget _cardCategoryBreakdown() {
+    final categoryTotals = <String, int>{};
+    for (final expense in vm.cardExpenses.where(
+      (expense) => expense['month'] == vm.month,
+    )) {
+      final category = FinanceController.string(expense['category']).trim();
+      final name = category.isEmpty ? 'Sem categoria' : category;
+      categoryTotals[name] =
+          (categoryTotals[name] ?? 0) +
+          FinanceController.integer(expense['amount_cents']);
+    }
+    final sortedTotals = categoryTotals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      title: const Text(
+        'Gastos por categoria',
+        style: TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        'Toque para ver onde estão os maiores gastos',
+        style: TextStyle(color: AppTheme.muted, fontSize: 12),
+      ),
+      children: [
+        if (sortedTotals.isEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Não há compras no cartão neste mês.',
+                style: TextStyle(color: AppTheme.muted),
+              ),
+            ),
+          )
+        else
+          ...sortedTotals.map((entry) {
+            final percentage = vm.cardTotal == 0
+                ? 0
+                : (entry.value * 100 / vm.cardTotal).round();
+            final fraction = vm.cardTotal == 0
+                ? 0.0
+                : (entry.value / vm.cardTotal).clamp(0.0, 1.0);
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$percentage% em ${entry.key}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Text(
+                        money(entry.value),
+                        style: const TextStyle(
+                          color: AppTheme.lime,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: fraction,
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(8),
+                    color: AppTheme.lime,
+                    backgroundColor: AppTheme.surface2,
+                  ),
+                ],
+              ),
+            );
+          }),
+      ],
     );
   }
 }

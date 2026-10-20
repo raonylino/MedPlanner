@@ -20,7 +20,7 @@ class CardsPage extends StatelessWidget {
         key: 'limit',
         label: 'Limite total do cartão (R\$)',
         initial: '',
-        keyboard: TextInputType.number,
+        keyboard: const TextInputType.numberWithOptions(decimal: true),
       ),
     ]);
     if (data != null &&
@@ -47,7 +47,7 @@ class CardsPage extends StatelessWidget {
         initial: (FinanceController.integer(card['limit_cents']) / 100)
             .toStringAsFixed(2)
             .replaceAll('.', ','),
-        keyboard: TextInputType.number,
+        keyboard: const TextInputType.numberWithOptions(decimal: true),
       ),
     ]);
     if (data == null ||
@@ -83,6 +83,20 @@ class CardsPage extends StatelessWidget {
   }) async {
     final editPurchase = purchase != null;
     final recurring = FinanceController.integer(expense['recurring']) == 1;
+    final installments =
+        purchase == null
+              ? const <Map<String, Object?>>[]
+              : List<Map<String, Object?>>.of(purchase)
+          ..sort(
+            (a, b) => FinanceController.integer(
+              a['installment_index'],
+            ).compareTo(FinanceController.integer(b['installment_index'])),
+          );
+    final firstInstallment = installments.firstOrNull ?? expense;
+    final firstMonth = FinanceController.string(firstInstallment['month']);
+    final initialInstallmentCount = FinanceController.integer(
+      firstInstallment['installment_count'],
+    ).clamp(1, 60);
     final amountCents = editPurchase
         ? recurring
               ? FinanceController.integer(expense['amount_cents'])
@@ -105,6 +119,11 @@ class CardsPage extends StatelessWidget {
     if (selectedCategory.isNotEmpty &&
         !options.any((option) => option.value == selectedCategory)) {
       options.add((value: selectedCategory, label: selectedCategory));
+    }
+    final monthOptionsList = monthOptions();
+    if (firstMonth.isNotEmpty &&
+        !monthOptionsList.any((option) => option.value == firstMonth)) {
+      monthOptionsList.add((value: firstMonth, label: monthLabel(firstMonth)));
     }
     final data = await showSmartForm(
       context,
@@ -142,6 +161,21 @@ class CardsPage extends StatelessWidget {
           initial: (amountCents / 100).toStringAsFixed(2).replaceAll('.', ','),
           keyboard: TextInputType.number,
         ),
+        if (editPurchase && !recurring) ...[
+          SmartFieldSpec(
+            key: 'first_month',
+            label: 'Mês da primeira parcela',
+            initial: firstMonth,
+            kind: SmartFieldKind.dropdown,
+            options: monthOptionsList,
+          ),
+          SmartFieldSpec(
+            key: 'installment_count',
+            label: 'Quantidade de parcelas',
+            initial: '$initialInstallmentCount',
+            keyboard: TextInputType.number,
+          ),
+        ],
       ],
     );
     if (data == null ||
@@ -150,21 +184,42 @@ class CardsPage extends StatelessWidget {
         centsFrom(data['amount'].toString()) <= 0) {
       return;
     }
+    final installmentCount = editPurchase && !recurring
+        ? int.tryParse(data['installment_count']?.toString() ?? '')
+        : initialInstallmentCount;
+    final firstMonthValue = editPurchase && !recurring
+        ? data['first_month']?.toString() ?? ''
+        : firstMonth;
     if (editPurchase &&
-        purchase.length == 1 &&
-        FinanceController.string(expense['purchase_id']).isEmpty) {
-      await vm.updateCardExpense(
-        id: FinanceController.integer(expense['id']),
-        title: data['title'].toString().trim(),
-        category: data['category'].toString(),
-        amountCents: centsFrom(data['amount'].toString()),
+        !recurring &&
+        (installmentCount == null ||
+            installmentCount < 1 ||
+            installmentCount > 60 ||
+            DateTime.tryParse('$firstMonthValue-01') == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Informe o mês da primeira parcela e uma quantidade entre 1 e 60.',
+          ),
+        ),
       );
-    } else if (editPurchase) {
+      return;
+    }
+    if (editPurchase &&
+        !recurring &&
+        installmentCount! < initialInstallmentCount &&
+        !await _confirmInstallmentReduction(context)) {
+      return;
+    }
+    if (editPurchase) {
       await vm.updateCardPurchase(
         purchaseId: FinanceController.string(expense['purchase_id']),
+        expenseId: FinanceController.integer(expense['id']),
         title: data['title'].toString().trim(),
         category: data['category'].toString(),
         totalCents: centsFrom(data['amount'].toString()),
+        firstMonth: firstMonthValue,
+        installmentCount: installmentCount!,
       );
     } else {
       await vm.updateCardExpense(
@@ -174,6 +229,29 @@ class CardsPage extends StatelessWidget {
         amountCents: centsFrom(data['amount'].toString()),
       );
     }
+  }
+
+  Future<bool> _confirmInstallmentReduction(BuildContext context) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Reduzir parcelas?'),
+            content: const Text(
+              'As parcelas excedentes serão removidas, inclusive as que já foram marcadas como pagas.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Continuar'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   Future<void> _deleteCardExpense(
@@ -259,7 +337,7 @@ class CardsPage extends StatelessWidget {
       const SmartFieldSpec(
         key: 'amount',
         label: 'Valor total',
-        keyboard: TextInputType.number,
+        keyboard: TextInputType.numberWithOptions(decimal: true),
       ),
       const SmartFieldSpec(
         key: 'count',
@@ -340,7 +418,7 @@ class CardsPage extends StatelessWidget {
             ],
           ),
         ),
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(20, 12, 20, 6),
           child: Text(
             'Seus cartões',
@@ -407,7 +485,7 @@ class CardsPage extends StatelessWidget {
                 ),
                 subtitle: Text(
                   'Disponível ${money(available)} • Limite ${money(limit)}',
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                  style: TextStyle(color: AppTheme.muted, fontSize: 12),
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -426,7 +504,7 @@ class CardsPage extends StatelessWidget {
                         PopupMenuItem(value: 'delete', child: Text('Apagar')),
                       ],
                     ),
-                    const Icon(Icons.expand_more, color: AppTheme.muted),
+                    Icon(Icons.expand_more, color: AppTheme.muted),
                   ],
                 ),
                 childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
@@ -444,7 +522,7 @@ class CardsPage extends StatelessWidget {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         '${money(outstanding)} comprometidos em parcelas ainda não pagas',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppTheme.muted,
                           fontSize: 12,
                         ),
@@ -452,7 +530,7 @@ class CardsPage extends StatelessWidget {
                     ),
                   ),
                   if (monthPurchases.isEmpty)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.all(12),
                       child: Text(
                         'Não há parcelas deste cartão nesta fatura.',
@@ -474,7 +552,7 @@ class CardsPage extends StatelessWidget {
           );
         }),
         if (vm.cards.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(24),
             child: Text(
               'Cadastre seu primeiro cartão para acompanhar gastos e limite.',
@@ -483,7 +561,7 @@ class CardsPage extends StatelessWidget {
             ),
           ),
         if (vm.cards.isNotEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
             child: Text(
               'O limite é reservado pelo saldo total das parcelas em aberto. Marque cada parcela paga na fatura para liberar novamente esse valor. Assinaturas futuras só comprometem o limite no mês correspondente.',
@@ -528,7 +606,7 @@ class CardsPage extends StatelessWidget {
             ),
             subtitle: Text(
               '${purchaseKeys.length} ${purchaseKeys.length == 1 ? 'compra' : 'compras'} nesta fatura',
-              style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+              style: TextStyle(color: AppTheme.muted, fontSize: 12),
             ),
             trailing: Text(
               money(total),
@@ -579,7 +657,7 @@ class CardsPage extends StatelessWidget {
             ),
             subtitle: Text(
               '${FinanceController.string(first['category'])} • ${recurring ? 'Assinatura' : '${purchase.length} parcelas'}',
-              style: const TextStyle(color: AppTheme.muted),
+              style: TextStyle(color: AppTheme.muted),
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
@@ -650,18 +728,11 @@ class CardsPage extends StatelessWidget {
       title: Text(description, style: const TextStyle(fontSize: 13)),
       subtitle: Text(
         paid ? 'Pago' : 'Em aberto',
-        style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+        style: TextStyle(color: AppTheme.muted, fontSize: 12),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            money(FinanceController.integer(installment['amount_cents'])),
-            style: const TextStyle(
-              color: AppTheme.lime,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
           PopupMenuButton<String>(
             tooltip: 'Ações da parcela',
             onSelected: (action) {
@@ -684,20 +755,11 @@ class CardsPage extends StatelessWidget {
                 value: 'edit',
                 child: Text('Editar somente esta parcela'),
               ),
-              if (purchase.length > 1)
-                const PopupMenuItem(
-                  value: 'edit-all',
-                  child: Text('Editar todas as parcelas'),
-                ),
+
               const PopupMenuItem(
                 value: 'delete',
                 child: Text('Apagar somente esta parcela'),
               ),
-              if (purchase.length > 1)
-                const PopupMenuItem(
-                  value: 'delete-all',
-                  child: Text('Apagar todas as parcelas'),
-                ),
             ],
           ),
         ],

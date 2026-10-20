@@ -71,8 +71,10 @@ class FinanceController extends Notifier<FinanceState> {
           (await db.getSetting('tax_percent')).replaceAll(',', '.'),
         ) ??
         0;
+    final lightTheme = await db.getSetting('light_theme') == '1';
     state = state.copyWith(
       loading: false,
+      lightTheme: lightTheme,
       expenses: List.unmodifiable(rows[0].map(ExpenseModel.new)),
       incomes: List.unmodifiable(rows[1].map(IncomeModel.new)),
       services: List.unmodifiable(rows[2].map(ServiceModel.new)),
@@ -245,12 +247,23 @@ class FinanceController extends Notifier<FinanceState> {
 
   Future<void> updateCardPurchase({
     required String purchaseId,
+    required int expenseId,
     required String title,
     required String category,
     required int totalCents,
+    required String firstMonth,
+    required int installmentCount,
   }) async {
     await _commands.run(
-      UpdateCardPurchaseCommand(purchaseId, title, category, totalCents),
+      UpdateCardPurchaseCommand(
+        purchaseId,
+        expenseId,
+        title,
+        category,
+        totalCents,
+        firstMonth,
+        installmentCount,
+      ),
     );
     await load(showLoading: false);
   }
@@ -306,6 +319,11 @@ class FinanceController extends Notifier<FinanceState> {
   Future<void> saveTax(double value) async {
     await _commands.run(SaveTaxCommand(value));
     await load(showLoading: false);
+  }
+
+  Future<void> setLightTheme(bool enabled) async {
+    await ref.read(appDatabaseProvider).setting('light_theme', enabled ? '1' : '0');
+    state = state.copyWith(lightTheme: enabled);
   }
 
   Future<void> addInvestment(String name, String mode, int value) async {

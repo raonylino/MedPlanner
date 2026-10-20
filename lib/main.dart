@@ -21,31 +21,30 @@ import 'features/settings/viewmodel/settings_view_model.dart';
 
 void main() => runApp(const ProviderScope(child: FinanceApp()));
 
-class FinanceApp extends StatelessWidget {
+class FinanceApp extends ConsumerWidget {
   const FinanceApp({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'MedPlanner',
-    debugShowCheckedModeBanner: false,
-    locale: const Locale('pt', 'BR'),
-    localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    supportedLocales: const [Locale('pt', 'BR')],
-    theme: AppTheme.dark,
-    home: Consumer(
-      builder: (context, ref, _) {
-        final state = ref.watch(financeProvider);
-        return state.loading ? const MedPlannerSplash() : const FinanceShell();
-      },
-    ),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(financeProvider);
+    AppTheme.lightMode = state.lightTheme;
+    return MaterialApp(
+      title: 'MedPlanner',
+      debugShowCheckedModeBanner: false,
+      locale: const Locale('pt', 'BR'),
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [Locale('pt', 'BR')],
+      theme: AppTheme.current,
+      home: state.loading ? const MedPlannerSplash() : const FinanceShell(),
+    );
+  }
 }
 
 class MedPlannerSplash extends StatelessWidget {
   const MedPlannerSplash({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold(
+  Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppTheme.bg,
     body: Center(
       child: Column(
@@ -161,12 +160,12 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
                   const SizedBox(height: 8),
                   Text(
                     page.description,
-                    style: const TextStyle(color: AppTheme.muted, height: 1.4),
+                    style: TextStyle(color: AppTheme.muted, height: 1.4),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     '${step + 1} de ${pages.length}',
-                    style: const TextStyle(color: AppTheme.muted, fontSize: 12),
+                    style: TextStyle(color: AppTheme.muted, fontSize: 12),
                   ),
                 ],
               ),
@@ -231,14 +230,14 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
       bottomNavigationBar: CircleNavBar(
         activeIndex: selected,
         onTap: (index) => setState(() => selected = index),
-        activeIcons: const [
+        activeIcons: [
           Icon(Icons.south_west, color: AppTheme.bg),
           Icon(Icons.event_note, color: AppTheme.bg),
           Icon(Icons.space_dashboard, color: AppTheme.bg),
           Icon(Icons.credit_card, color: AppTheme.bg),
           Icon(Icons.flag, color: AppTheme.bg),
         ],
-        inactiveIcons: const [
+        inactiveIcons: [
           Icon(Icons.south_west, color: AppTheme.muted),
           Icon(Icons.event_note_outlined, color: AppTheme.muted),
           Icon(Icons.space_dashboard_outlined, color: AppTheme.muted),
@@ -251,7 +250,7 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
           fontSize: 10,
           fontWeight: FontWeight.w700,
         ),
-        inactiveLevelsStyle: const TextStyle(
+        inactiveLevelsStyle: TextStyle(
           color: AppTheme.muted,
           fontSize: 10,
         ),

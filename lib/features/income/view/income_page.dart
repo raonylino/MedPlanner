@@ -60,7 +60,7 @@ class _IncomePageState extends State<IncomePage> {
               : (FinanceController.integer(unit) / 100)
                     .toStringAsFixed(2)
                     .replaceAll('.', ','),
-          keyboard: TextInputType.number,
+          keyboard: const TextInputType.numberWithOptions(decimal: true),
         ),
         SmartFieldSpec(
           key: 'quantity',
@@ -101,6 +101,9 @@ class _IncomePageState extends State<IncomePage> {
           options: monthOptionsList,
         ),
       ],
+      onDelete: existing == null
+          ? null
+          : (dialogContext) => _deleteIncome(dialogContext, existing),
     );
     if (data == null ||
         data['service'].toString().trim().isEmpty ||
@@ -150,6 +153,20 @@ class _IncomePageState extends State<IncomePage> {
         investmentIds: payload['investmentIds'] as String,
       );
     }
+  }
+
+  Future<bool> _deleteIncome(
+    BuildContext context,
+    Map<String, Object?> income,
+  ) async {
+    final deleted = await confirmDeleteRecord(
+      context,
+      title: 'Apagar plantão?',
+      message: 'Este plantão será removido permanentemente.',
+    );
+    if (!deleted || !context.mounted) return false;
+    await vm.delete('incomes', FinanceController.integer(income['id']));
+    return true;
   }
 
   @override
@@ -204,7 +221,7 @@ class _IncomePageState extends State<IncomePage> {
           child: _monthPicker(),
         ),
         if (vm.services.isNotEmpty && tab == 0) ...[
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(20, 14, 20, 2),
             child: Text(
               'Locais salvos',
@@ -276,7 +293,7 @@ class _IncomePageState extends State<IncomePage> {
               ),
               subtitle: Text(
                 '${dateLabel(date)} • $quantityLabel ${quantity == 1 ? 'plantão' : 'plantões'}${FinanceController.integer(entry['tax_applies']) == 1 ? ' • imposto aplicado' : ''}',
-                style: const TextStyle(color: AppTheme.muted),
+                style: TextStyle(color: AppTheme.muted),
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -306,10 +323,10 @@ class _IncomePageState extends State<IncomePage> {
                   ? 'Ainda não há recebimentos previstos para este mês.'
                   : 'Ainda não há plantões cadastrados para ${monthLabel(vm.month)}.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.muted),
+              style: TextStyle(color: AppTheme.muted),
             ),
           ),
-        const Padding(
+        Padding(
           padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
           child: Text(
             'O valor exibido é uma estimativa líquida após imposto selecionado e investimentos configurados.',

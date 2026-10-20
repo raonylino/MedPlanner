@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../core/theme/app_theme.dart';
 
 String money(int cents) =>
@@ -22,7 +24,7 @@ class PageHeading extends StatelessWidget {
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
-          Text(subtitle!, style: const TextStyle(color: AppTheme.muted)),
+          Text(subtitle!, style: TextStyle(color: AppTheme.muted)),
         ],
       ],
     ),
@@ -51,7 +53,7 @@ class AmountCard extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: highlight ? AppTheme.bg : AppTheme.muted,
+            color: highlight ? AppTheme.onLime : AppTheme.muted,
             fontSize: 13,
           ),
         ),
@@ -59,7 +61,7 @@ class AmountCard extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            color: highlight ? AppTheme.bg : AppTheme.text,
+            color: highlight ? AppTheme.onLime : AppTheme.text,
             fontSize: 22,
             fontWeight: FontWeight.w800,
           ),
@@ -86,7 +88,7 @@ class RecordTile extends StatelessWidget {
     child: ListTile(
       onTap: onTap,
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(color: AppTheme.muted)),
+      subtitle: Text(subtitle, style: TextStyle(color: AppTheme.muted)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -113,12 +115,12 @@ class RecordTile extends StatelessWidget {
             IconButton(
               tooltip: 'Editar',
               onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined, color: AppTheme.muted),
+              icon: Icon(Icons.edit_outlined, color: AppTheme.muted),
             )
           else if (onDelete != null)
             IconButton(
               onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline, color: AppTheme.muted),
+              icon: Icon(Icons.delete_outline, color: AppTheme.muted),
             ),
         ],
       ),
@@ -149,6 +151,8 @@ class SmartFieldSpec {
     this.lastDate,
     this.onCreateOption,
     this.onDeleteOption,
+    this.spacingAfter = 0,
+    this.helperText,
   });
   final String key;
   final String label;
@@ -161,6 +165,8 @@ class SmartFieldSpec {
   final Future<String?> Function(BuildContext context)? onCreateOption;
   final Future<bool> Function(BuildContext context, String value)?
   onDeleteOption;
+  final double spacingAfter;
+  final String? helperText;
 }
 
 const _createOptionValue = '__create_category__';
@@ -436,7 +442,7 @@ class _MonthCarouselState extends State<MonthCarousel> {
               Expanded(
                 child: Text(
                   widget.label,
-                  style: const TextStyle(color: AppTheme.muted),
+                  style: TextStyle(color: AppTheme.muted),
                 ),
               ),
               TextButton.icon(
@@ -589,8 +595,9 @@ Future<String?> _showCategorySelector(
 Future<Map<String, Object?>?> showSmartForm(
   BuildContext context,
   String title,
-  List<SmartFieldSpec> fields,
-) async {
+  List<SmartFieldSpec> fields, {
+  Future<bool> Function(BuildContext context)? onDelete,
+}) async {
   final values = <String, Object?>{
     for (final field in fields)
       field.key: switch (field.kind) {
@@ -626,6 +633,7 @@ Future<Map<String, Object?>?> showSmartForm(
                     child: TextFormField(
                       initialValue: field.initial,
                       keyboardType: field.keyboard,
+                      inputFormatters: _numericInputFormatters(field.keyboard),
                       decoration: InputDecoration(labelText: field.label),
                       onChanged: (value) => values[field.key] = value,
                     ),
@@ -748,11 +756,11 @@ Future<Map<String, Object?>?> showSmartForm(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Text(
                             field.label,
-                            style: const TextStyle(color: AppTheme.muted),
+                            style: TextStyle(color: AppTheme.muted),
                           ),
                         ),
                         if (field.options.isEmpty)
-                          const Text(
+                          Text(
                             'Nenhuma regra de investimento cadastrada.',
                             style: TextStyle(color: AppTheme.muted),
                           )
@@ -835,46 +843,77 @@ Future<Map<String, Object?>?> showSmartForm(
                       : requestedDate.isAfter(lastDate)
                       ? lastDate
                       : requestedDate;
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(field.label),
-                    subtitle: Text(
-                      value.isEmpty ? 'Sem vencimento' : dateLabel(value),
-                      style: const TextStyle(color: AppTheme.lime),
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (value.isNotEmpty)
-                          IconButton(
-                            tooltip: 'Limpar vencimento',
-                            onPressed: () =>
-                                setDialogState(() => values[field.key] = ''),
-                            icon: const Icon(Icons.close),
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(field.label),
+                        subtitle: Text(
+                          value.isEmpty ? 'Sem vencimento' : dateLabel(value),
+                          style: TextStyle(color: AppTheme.lime),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (value.isNotEmpty)
+                              IconButton(
+                                tooltip: 'Limpar vencimento',
+                                onPressed: () => setDialogState(
+                                  () => values[field.key] = '',
+                                ),
+                                icon: const Icon(Icons.close),
+                              ),
+                            const Icon(Icons.calendar_month),
+                          ],
+                        ),
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: dialogContext,
+                            initialDate: date,
+                            firstDate: firstDate,
+                            lastDate: lastDate,
+                          );
+                          if (picked != null) {
+                            setDialogState(
+                              () => values[field.key] =
+                                  '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}',
+                            );
+                          }
+                        },
+                      ),
+                      if (field.helperText != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            field.helperText!,
+                            style: TextStyle(
+                              color: AppTheme.muted,
+                              fontSize: 12,
+                            ),
                           ),
-                        const Icon(Icons.calendar_month),
-                      ],
-                    ),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: dialogContext,
-                        initialDate: date,
-                        firstDate: firstDate,
-                        lastDate: lastDate,
-                      );
-                      if (picked != null) {
-                        setDialogState(
-                          () => values[field.key] =
-                              '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}',
-                        );
-                      }
-                    },
+                        ),
+                    ],
                   );
               }
             }).toList(),
           ),
         ),
         actions: [
+          if (onDelete != null)
+            TextButton.icon(
+              onPressed: () async {
+                final deleted = await onDelete(dialogContext);
+                if (deleted && dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Apagar plantão'),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+            ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancelar'),
@@ -935,6 +974,7 @@ Future<Map<String, String>?> showDataForm(
                 child: TextFormField(
                   initialValue: f.initial,
                   keyboardType: f.keyboard,
+                  inputFormatters: _numericInputFormatters(f.keyboard),
                   decoration: InputDecoration(labelText: f.label),
                   onChanged: (value) => values[f.key] = value,
                 ),
@@ -957,6 +997,21 @@ Future<Map<String, String>?> showDataForm(
     ),
   );
   return result;
+}
+
+List<TextInputFormatter>? _numericInputFormatters(TextInputType keyboard) {
+  if (keyboard == TextInputType.number) {
+    return [FilteringTextInputFormatter.digitsOnly];
+  }
+  if (keyboard == const TextInputType.numberWithOptions(decimal: true)) {
+    return [
+      TextInputFormatter.withFunction((oldValue, newValue) {
+        final isValid = RegExp(r'^\d*([,.]\d*)?$').hasMatch(newValue.text);
+        return isValid ? newValue : oldValue;
+      }),
+    ];
+  }
+  return null;
 }
 
 int centsFrom(String value) {

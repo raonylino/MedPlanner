@@ -64,7 +64,7 @@ class GoalsPage extends StatelessWidget {
               : (FinanceController.integer(existing['unit_cents']) / 100)
                     .toStringAsFixed(2)
                     .replaceAll('.', ','),
-          keyboard: TextInputType.number,
+          keyboard: const TextInputType.numberWithOptions(decimal: true),
         ),
         SmartFieldSpec(
           key: 'quantity',
@@ -152,7 +152,7 @@ class GoalsPage extends StatelessWidget {
           ),
         ),
         if (grouped.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(28),
             child: Text(
               'Suas metas aparecem aqui. Elas não entram nos gastos até você decidir comprá-las.',

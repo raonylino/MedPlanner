@@ -12,8 +12,18 @@ class ExpenseNotificationService {
   Future<void> _initialize() async {
     if (_initialized) return;
     timezone_data.initializeTimeZones();
-    final localTimezone = await FlutterTimezone.getLocalTimezone();
-    timezone.setLocalLocation(timezone.getLocation(localTimezone.identifier));
+    try {
+      final localTimezone = await FlutterTimezone.getLocalTimezone();
+      final identifier = switch (localTimezone.identifier) {
+        'GMT' || 'UTC' || 'Etc/UTC' => 'Etc/UTC',
+        final value => value,
+      };
+      timezone.setLocalLocation(timezone.getLocation(identifier));
+    } on timezone.LocationNotFoundException {
+      // Some Android devices report aliases such as GMT that are absent from
+      // the bundled IANA database. Keep timezone's initialized UTC fallback.
+      timezone.setLocalLocation(timezone.getLocation('Etc/UTC'));
+    }
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
