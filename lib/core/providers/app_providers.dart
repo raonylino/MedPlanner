@@ -4,6 +4,7 @@ import '../database/app_database.dart';
 import '../notifications/expense_notification_service.dart';
 import '../../features/finance_commands.dart';
 import '../../features/settings/viewmodel/cloud_backup_view_model.dart';
+import '../../features/auth/viewmodel/auth_view_model.dart';
 import 'finance_controller.dart';
 import '../models/finance_state.dart';
 
@@ -18,6 +19,9 @@ final supabaseAuthStateProvider = StreamProvider<AuthState>(
 );
 final cloudBackupViewModelProvider = Provider<CloudBackupViewModel>(
   (ref) => CloudBackupViewModel(ref.watch(supabaseClientProvider)),
+);
+final authViewModelProvider = Provider<AuthViewModel>(
+  (ref) => AuthViewModel(ref.watch(supabaseClientProvider)),
 );
 final expenseNotificationServiceProvider = Provider<ExpenseNotificationService>(
   (ref) => ExpenseNotificationService(),

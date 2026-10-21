@@ -33,6 +33,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_riverpod: ^3.3.2
+  floating_snackbar: ^2.0.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -74,6 +75,8 @@ flutter:
 
   assets:
     - assets/image/icon.png
+    - assets/image/finance_wallet_hero.png
+    - assets/image/avatars/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

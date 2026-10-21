@@ -1,7 +1,23 @@
+import 'package:floating_snackbar/floating_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/theme/app_theme.dart';
+
+void showFloatingNotice(
+  BuildContext context,
+  String message, {
+  FloatingSnackBarType type = FloatingSnackBarType.info,
+}) {
+  FloatingSnackBar.show(
+    context,
+    message,
+    type: type,
+    position: FloatingSnackBarPosition.bottom,
+    animation: FloatingSnackBarAnimation.slide,
+    duration: const Duration(seconds: 3),
+  );
+}
 
 String money(int cents) =>
     'R\$ ${(cents / 100).toStringAsFixed(2).replaceAll('.', ',')}';

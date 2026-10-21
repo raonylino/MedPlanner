@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/providers/finance_controller.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/ui.dart';
 import '../viewmodel/cloud_backup_view_model.dart';
 
 class CloudBackupPanel extends ConsumerStatefulWidget {
@@ -21,99 +22,7 @@ class _CloudBackupPanelState extends ConsumerState<CloudBackupPanel> {
 
   void _notice(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _account(CloudBackupViewModel cloud) async {
-    final email = TextEditingController();
-    final password = TextEditingController();
-    var creating = false;
-    var busy = false;
-    var message = '';
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          backgroundColor: AppTheme.surface,
-          title: Text(creating ? 'Criar conta na nuvem' : 'Entrar na nuvem'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: email,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                decoration: const InputDecoration(labelText: 'E-mail'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: password,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Senha'),
-              ),
-              if (message.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(message, style: TextStyle(color: AppTheme.muted)),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : () => setDialogState(() {
-                      creating = !creating;
-                      message = '';
-                    }),
-              child: Text(creating ? 'Já tenho conta' : 'Criar conta'),
-            ),
-            FilledButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      setDialogState(() {
-                        busy = true;
-                        message = '';
-                      });
-                      try {
-                        final authenticated = creating
-                            ? await cloud.signUp(email.text, password.text)
-                            : await cloud.signIn(email.text, password.text);
-                        if (authenticated) {
-                          if (dialogContext.mounted) {
-                            Navigator.pop(dialogContext);
-                          }
-                        } else {
-                          setDialogState(() {
-                            busy = false;
-                            message =
-                                'Conta criada. Confirme o e-mail recebido e depois entre no app.';
-                          });
-                        }
-                      } catch (error) {
-                        setDialogState(() {
-                          busy = false;
-                          message = _authError(error);
-                        });
-                      }
-                    },
-              child: busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(creating ? 'Criar' : 'Entrar'),
-            ),
-          ],
-        ),
-      ),
-    );
-    email.dispose();
-    password.dispose();
-    if (mounted) setState(() {});
+    showFloatingNotice(context, message);
   }
 
   String _authError(Object error) {
@@ -212,33 +121,11 @@ class _CloudBackupPanelState extends ConsumerState<CloudBackupPanel> {
         Card(
           child: ListTile(
             leading: Icon(Icons.cloud_outlined, color: AppTheme.lime),
-            title: Text(
-              user == null
-                  ? 'Conectar conta Supabase'
-                  : user.email ?? 'Conta conectada',
-            ),
-            subtitle: Text(
-              user == null
-                  ? 'Entre ou crie uma conta para guardar seu backup na nuvem'
-                  : 'Conta conectada ao backup seguro na nuvem',
-            ),
-            trailing: _busy
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : IconButton(
-                    tooltip: user == null ? 'Entrar ou criar conta' : 'Sair',
-                    onPressed: () => user == null
-                        ? _account(cloud)
-                        : cloud.signOut().then((_) {
-                            if (mounted) setState(() {});
-                          }),
-                    icon: Icon(user == null ? Icons.login : Icons.logout),
-                  ),
+            title: Text(user?.email ?? 'Conta autenticada'),
+            subtitle: const Text('Backup JSON na sua conta Supabase'),
           ),
         ),
+        const SizedBox(height: 8),
         if (user != null) ...[
           Card(
             child: ListTile(
@@ -250,6 +137,7 @@ class _CloudBackupPanelState extends ConsumerState<CloudBackupPanel> {
               onTap: _busy ? null : () => _upload(cloud),
             ),
           ),
+          const SizedBox(height: 8),
           Card(
             child: ListTile(
               enabled: !_busy,

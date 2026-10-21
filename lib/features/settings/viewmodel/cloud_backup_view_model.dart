@@ -7,24 +7,6 @@ class CloudBackupViewModel {
 
   User? get currentUser => _client.auth.currentUser;
 
-  Future<bool> signIn(String email, String password) async {
-    final response = await _client.auth.signInWithPassword(
-      email: email.trim(),
-      password: password,
-    );
-    return response.session != null;
-  }
-
-  Future<bool> signUp(String email, String password) async {
-    final response = await _client.auth.signUp(
-      email: email.trim(),
-      password: password,
-    );
-    return response.session != null;
-  }
-
-  Future<void> signOut() => _client.auth.signOut();
-
   Future<bool> hasCloudBackup() async {
     final user = _client.auth.currentUser;
     if (user == null) throw StateError('Entre na sua conta primeiro.');

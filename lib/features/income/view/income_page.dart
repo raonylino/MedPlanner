@@ -115,10 +115,9 @@ class _IncomePageState extends State<IncomePage> {
       data['quantity'].toString().trim().replaceAll(',', '.'),
     );
     if (quantity == null || !quantity.isFinite || quantity <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Informe uma quantidade de plantões maior que zero.'),
-        ),
+      showFloatingNotice(
+        context,
+        'Informe uma quantidade de plantões maior que zero.',
       );
       return;
     }

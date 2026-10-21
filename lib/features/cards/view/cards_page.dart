@@ -1,3 +1,4 @@
+import 'package:floating_snackbar/floating_snackbar.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -196,12 +197,10 @@ class CardsPage extends StatelessWidget {
             installmentCount < 1 ||
             installmentCount > 60 ||
             DateTime.tryParse('$firstMonthValue-01') == null)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Informe o mês da primeira parcela e uma quantidade entre 1 e 60.',
-          ),
-        ),
+      showFloatingNotice(
+        context,
+        'Informe o mês da primeira parcela e uma quantidade entre 1 e 60.',
+        type: FloatingSnackBarType.warning,
       );
       return;
     }
@@ -290,8 +289,10 @@ class CardsPage extends StatelessWidget {
 
   Future<void> _addExpense(BuildContext context) async {
     if (vm.cards.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cadastre um cartão primeiro.')),
+      showFloatingNotice(
+        context,
+        'Cadastre um cartão primeiro.',
+        type: FloatingSnackBarType.warning,
       );
       return;
     }

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/supabase_config.dart';
 import 'core/providers/app_providers.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/view/login_page.dart';
 import 'features/cards/view/cards_page.dart';
 import 'features/cards/viewmodel/cards_view_model.dart';
 import 'features/dashboard/view/dashboard_page.dart';
@@ -43,8 +44,23 @@ class FinanceApp extends ConsumerWidget {
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const [Locale('pt', 'BR')],
       theme: AppTheme.current,
-      home: state.loading ? const MedPlannerSplash() : const FinanceShell(),
+      home: state.loading ? const MedPlannerSplash() : const AppEntryGate(),
     );
+  }
+}
+
+class AppEntryGate extends ConsumerWidget {
+  const AppEntryGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(supabaseAuthStateProvider);
+    final session =
+        authState.asData?.value.session ??
+        ref.read(supabaseClientProvider).auth.currentSession;
+    if (session != null) return const FinanceShell();
+    if (authState.isLoading) return const MedPlannerSplash();
+    return const LoginPage();
   }
 }
 
@@ -91,7 +107,7 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
   static const titles = [
     'Planejamento',
     'Recebimentos',
-    'Visão geral',
+    'Início',
     'Cartões',
     'Metas',
   ];
@@ -204,6 +220,30 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
   @override
   Widget build(BuildContext context) {
     ref.watch(financeProvider);
+    ref.watch(supabaseAuthStateProvider);
+    final user = ref.watch(supabaseClientProvider).auth.currentUser;
+    final fullName = user?.userMetadata?['full_name']?.toString().trim() ?? '';
+    final firstName = fullName.isEmpty
+        ? ''
+        : fullName.split(RegExp(r'\s+')).first;
+    final greetingName = firstName.isEmpty
+        ? ''
+        : '${firstName[0].toUpperCase()}${firstName.substring(1)}';
+    final hour = DateTime.now().hour;
+    final String greeting;
+    if (hour >= 5 && hour < 12) {
+      greeting = 'Bom dia';
+    } else if (hour >= 12 && hour < 18) {
+      greeting = 'Boa tarde';
+    } else {
+      greeting = 'Boa noite';
+    }
+    final String title;
+    if (selected == 2) {
+      title = greetingName.isEmpty ? '$greeting!' : '$greeting, $greetingName';
+    } else {
+      title = titles[selected];
+    }
     final incomeVm = ref.read(incomeViewModelProvider);
     final planningVm = ref.read(planningViewModelProvider);
     final dashboardVm = ref.read(dashboardViewModelProvider);
@@ -219,10 +259,7 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
     ];
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          titles[selected],
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
             tooltip: 'Configurações e backup',
@@ -230,7 +267,7 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
               context,
               MaterialPageRoute(builder: (_) => SettingsPage(vm: settingsVm)),
             ),
-            icon: const Icon(Icons.tune),
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),

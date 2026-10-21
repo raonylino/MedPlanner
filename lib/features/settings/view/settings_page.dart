@@ -12,8 +12,10 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/ui.dart';
-import 'cloud_backup_panel.dart';
+import '../../auth/view/avatar_picker.dart';
+import '../../auth/view/profile_page.dart';
 import '../viewmodel/settings_view_model.dart';
+import 'cloud_backup_panel.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({required this.vm, super.key});
@@ -81,7 +83,41 @@ class SettingsPage extends StatelessWidget {
   }
 
   static void _notice(BuildContext context, String text) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      showFloatingNotice(context, text);
+
+  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Sair do aplicativo?'),
+        content: const Text(
+          'Você precisará entrar novamente para acessar o app.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sair'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(authViewModelProvider).signOut();
+      if (context.mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } catch (error) {
+      if (context.mounted) {
+        showFloatingNotice(context, 'Não foi possível sair: $error');
+      }
+    }
+  }
 
   Future<File> _writeFile(String name, List<int> bytes) async {
     final dir = await getApplicationDocumentsDirectory();
@@ -207,131 +243,214 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) => Consumer(
     builder: (context, ref, _) {
       final financeState = ref.watch(financeProvider);
+      ref.watch(supabaseAuthStateProvider);
+      final user = ref.watch(supabaseClientProvider).auth.currentUser;
+      final profileName =
+          user?.userMetadata?['full_name']?.toString().trim() ?? '';
+      final avatarIndex =
+          int.tryParse(user?.userMetadata?['avatar_index']?.toString() ?? '') ??
+          1;
       return Scaffold(
         appBar: AppBar(title: const Text('Configurações')),
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            Text(
-              'Cálculos',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
             Card(
               child: ListTile(
-                leading: Icon(Icons.percent, color: AppTheme.lime),
-                title: const Text('Imposto estimado'),
-                subtitle: Text(
-                  'Usado somente em recebimentos marcados • ${vm.taxPercent}%',
-                ),
+                leading: AvatarPhoto(index: avatarIndex),
+                title: Text(profileName.isEmpty ? 'Meu perfil' : profileName),
+                subtitle: Text(user?.email ?? ''),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => _tax(context),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: ListTile(
-                leading: Icon(Icons.savings_outlined, color: AppTheme.lime),
-                title: const Text('Regras de investimento'),
-                subtitle: const Text(
-                  'Percentual calculado sobre o recebimento após imposto',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
                 ),
-                trailing: const Icon(Icons.add),
-                onTap: () => _investment(context),
               ),
             ),
-            const SizedBox(height: 8),
-            ...vm.investments.map(
-              (i) => Card(
-                child: ListTile(
-                  title: Text(FinanceController.string(i['name'])),
-                  subtitle: Text(
-                    i['mode'] == 'percent'
-                        ? '${i['value']}% do líquido'
-                        : 'Valor fixo • ${money(FinanceController.integer(i['value']))}',
+            const SizedBox(height: 10),
+            Card(
+              child: ExpansionTile(
+                leading: Icon(Icons.calculate_outlined, color: AppTheme.lime),
+                title: const Text('Cálculos'),
+                subtitle: const Text('Imposto e regras de investimento'),
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.percent, color: AppTheme.lime),
+                    title: const Text('Imposto estimado'),
+                    subtitle: Text(
+                      'Usado em recebimentos marcados • ${vm.taxPercent}%',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _tax(context),
                   ),
-                  trailing: IconButton(
-                    onPressed: () =>
-                        vm.deleteInvestment(FinanceController.integer(i['id'])),
-                    icon: const Icon(Icons.delete_outline),
+                  ListTile(
+                    leading: Icon(Icons.savings_outlined, color: AppTheme.lime),
+                    title: const Text('Adicionar regra de investimento'),
+                    subtitle: const Text(
+                      'Percentual ou valor fixo por recebimento',
+                    ),
+                    trailing: const Icon(Icons.add),
+                    onTap: () => _investment(context),
+                  ),
+                  ...vm.investments.map(
+                    (i) => ListTile(
+                      contentPadding: const EdgeInsets.only(
+                        left: 72,
+                        right: 16,
+                      ),
+                      title: Text(FinanceController.string(i['name'])),
+                      subtitle: Text(
+                        i['mode'] == 'percent'
+                            ? '${i['value']}% do líquido'
+                            : 'Valor fixo • ${money(FinanceController.integer(i['value']))}',
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Excluir regra',
+                        onPressed: () => vm.deleteInvestment(
+                          FinanceController.integer(i['id']),
+                        ),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: ExpansionTile(
+                leading: Icon(Icons.palette_outlined, color: AppTheme.lime),
+                title: const Text('Aparência'),
+                subtitle: Text(
+                  financeState.lightTheme ? 'Tema claro' : 'Tema escuro',
+                ),
+                children: [
+                  SwitchListTile(
+                    secondary: Icon(
+                      Icons.light_mode_outlined,
+                      color: AppTheme.lime,
+                    ),
+                    title: const Text('Tema claro'),
+                    subtitle: const Text(
+                      'Mantenha o verde como cor principal do aplicativo',
+                    ),
+                    value: financeState.lightTheme,
+                    onChanged: vm.setLightTheme,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: ExpansionTile(
+                leading: Icon(
+                  Icons.workspace_premium_outlined,
+                  color: AppTheme.lime,
+                ),
+                title: const Text('Assinaturas e planos'),
+                subtitle: const Text('Plano atual: Gratuito'),
+                children: [
+                  ListTile(
+                    leading: Icon(
+                      Icons.check_circle_outline,
+                      color: AppTheme.lime,
+                    ),
+                    title: const Text('Plano gratuito'),
+                    subtitle: const Text('Início e Entradas'),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.lock_outline, color: AppTheme.muted),
+                    title: const Text('Plano pago previsto'),
+                    subtitle: const Text('Planejar, Cartões e Metas'),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(72, 0, 20, 16),
+                    child: Text(
+                      'A cobrança ainda não está ativa. A assinatura será habilitada após a integração com o Google Play.',
+                      style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: ExpansionTile(
+                leading: Icon(Icons.cloud_outlined, color: AppTheme.lime),
+                title: const Text('Nuvem e sincronização'),
+                subtitle: const Text('Envio e restauração manuais'),
+                children: [CloudBackupPanel(finance: vm)],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: ExpansionTile(
+                leading: Icon(Icons.folder_outlined, color: AppTheme.lime),
+                title: const Text('Backup e exportação'),
+                subtitle: const Text('Excel e backup JSON'),
+                children: [
+                  ListTile(
+                    leading: Icon(
+                      Icons.file_download_outlined,
+                      color: AppTheme.lime,
+                    ),
+                    title: const Text('Exportar planilha Excel'),
+                    subtitle: const Text(
+                      'Gera .xlsx com os dados do aplicativo',
+                    ),
+                    onTap: () => _xlsx(context),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.backup_outlined, color: AppTheme.lime),
+                    title: const Text('Criar backup dos dados'),
+                    subtitle: const Text(
+                      'Gera arquivo JSON para guardar ou compartilhar',
+                    ),
+                    onTap: () => _backup(context),
+                  ),
+                  ListTile(
+                    leading: Icon(
+                      Icons.settings_backup_restore,
+                      color: AppTheme.lime,
+                    ),
+                    title: const Text('Restaurar backup JSON'),
+                    subtitle: const Text(
+                      'Substitui os dados locais pelo arquivo escolhido',
+                    ),
+                    onTap: () => _restore(context),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(72, 0, 20, 16),
+                    child: Text(
+                      'A restauração substitui os dados locais.',
+                      style: TextStyle(color: AppTheme.muted, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton.icon(
+                onPressed: () => _signOut(context, ref),
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text(
+                  'Sair do aplicativo',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD32F2F),
+                  foregroundColor: Colors.white,
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 22),
-            const Text(
-              'Aparência',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: SwitchListTile(
-                secondary: Icon(
-                  Icons.light_mode_outlined,
-                  color: AppTheme.lime,
-                ),
-                title: const Text('Tema claro'),
-                subtitle: const Text(
-                  'Use o aplicativo com fundo claro e mantenha o verde como cor principal',
-                ),
-                value: financeState.lightTheme,
-                onChanged: vm.setLightTheme,
-              ),
-            ),
-            const SizedBox(height: 22),
-            const Text(
-              'Supabase e nuvem',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            CloudBackupPanel(finance: vm),
-            const SizedBox(height: 22),
-            const Text(
-              'Backup e exportação',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: ListTile(
-                leading: Icon(
-                  Icons.file_download_outlined,
-                  color: AppTheme.lime,
-                ),
-                title: const Text('Exportar planilha Excel'),
-                subtitle: const Text('Gera .xlsx com os dados do aplicativo'),
-                onTap: () => _xlsx(context),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: ListTile(
-                leading: Icon(Icons.backup_outlined, color: AppTheme.lime),
-                title: const Text('Criar backup dos dados'),
-                subtitle: const Text(
-                  'Gera arquivo JSON para guardar ou compartilhar',
-                ),
-                onTap: () => _backup(context),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: ListTile(
-                leading: Icon(
-                  Icons.settings_backup_restore,
-                  color: AppTheme.lime,
-                ),
-                title: const Text('Restaurar backup JSON'),
-                subtitle: const Text(
-                  'Substitui os dados locais pelo arquivo escolhido',
-                ),
-                onTap: () => _restore(context),
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Os dados ficam neste aparelho. O envio e a restauração na nuvem são manuais; a restauração substitui os dados locais.',
-              style: TextStyle(color: AppTheme.muted, fontSize: 12),
-            ),
+            const SizedBox(height: 12),
           ],
         ),
       );

@@ -108,10 +108,9 @@ class PlanningPage extends StatelessWidget {
     final repeatCount = int.tryParse(data['repeat_count']?.toString() ?? '1');
     if (existing == null &&
         (repeatCount == null || repeatCount < 1 || repeatCount > 120)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Informe uma quantidade entre 1 e 120 meses.'),
-        ),
+      showFloatingNotice(
+        context,
+        'Informe uma quantidade entre 1 e 120 meses.',
       );
       return;
     }
@@ -348,12 +347,9 @@ class PlanningPage extends StatelessWidget {
   }
 
   void _showNotificationUnavailable(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Despesa atualizada, mas os lembretes estão desativados. Ative as notificações nas configurações do aparelho.',
-        ),
-      ),
+    showFloatingNotice(
+      context,
+      'Despesa atualizada, mas os lembretes estão desativados. Ative as notificações nas configurações do aparelho.',
     );
   }
 }
