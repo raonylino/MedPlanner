@@ -6,6 +6,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/ui.dart';
 import 'avatar_picker.dart';
+import 'password_strength.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -47,7 +48,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   String _errorMessage(Object error) {
     final message = error is AuthException ? error.message : error.toString();
     if (message.toLowerCase().contains('password')) {
-      return 'A senha precisa ter pelo menos 6 caracteres.';
+      return 'A senha precisa ter pelo menos 8 caracteres e atingir o nível médio.';
     }
     return message;
   }
@@ -70,8 +71,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Future<void> _savePassword() async {
     final password = _newPassword.text;
-    if (password.length < 6) {
-      _notice('A nova senha precisa ter pelo menos 6 caracteres.');
+    if (!PasswordPolicy.isAcceptable(password)) {
+      _notice('Use 8 caracteres ou mais e combine tipos diferentes de caracteres.');
       return;
     }
     if (password != _confirmPassword.text) {
@@ -167,7 +168,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             controller: _newPassword,
             obscureText: true,
             decoration: const InputDecoration(labelText: 'Nova senha'),
+            onChanged: (_) => setState(() {}),
           ),
+          PasswordStrengthIndicator(password: _newPassword.text),
           const SizedBox(height: 12),
           TextField(
             controller: _confirmPassword,

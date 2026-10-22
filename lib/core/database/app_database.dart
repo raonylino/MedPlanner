@@ -1,7 +1,8 @@
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
-/// SQLite is the single source of truth. No network client is used by the app.
+/// SQLite keeps the app available offline; an authenticated user is synced to
+/// the private Supabase JSON snapshot when the network is available.
 class AppDatabase {
   AppDatabase._();
   static final AppDatabase instance = AppDatabase._();
@@ -13,7 +14,7 @@ class AppDatabase {
     final root = await getDatabasesPath();
     return openDatabase(
       p.join(root, 'controle_financeiro.db'),
-      version: 7,
+      version: 9,
       onCreate: (db, _) async {
         await db.execute('''CREATE TABLE expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL,
@@ -54,6 +55,9 @@ class AppDatabase {
         await db.execute('''CREATE TABLE investments (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
         mode TEXT NOT NULL, value INTEGER NOT NULL)''');
+        await _createSyncState(db);
+        await _addSyncMetadata(db);
+        await _installSyncTriggers(db);
         await db.insert('settings', {'key': 'tax_percent', 'value': '0'});
         await db.insert('investments', {
           'name': 'Reserva',
@@ -143,10 +147,200 @@ class AppDatabase {
             FROM incomes_old''');
           await db.execute('DROP TABLE incomes_old');
         }
+        if (oldVersion < 8) {
+          await _createSyncState(db);
+        }
+        if (oldVersion < 9) {
+          await _createSyncState(db);
+          await _addSyncMetadata(db);
+          await _installSyncTriggers(db);
+        }
       },
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
     );
   }
+
+  Future<void> _createSyncState(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS sync_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      user_id TEXT,
+      last_synced_at TEXT,
+      last_sync_at TEXT,
+      baseline_json TEXT,
+      pending INTEGER NOT NULL DEFAULT 1 CHECK (pending IN (0, 1)),
+      syncing INTEGER NOT NULL DEFAULT 0 CHECK (syncing IN (0, 1)))''');
+    final columns = await db.rawQuery('PRAGMA table_info(sync_state)');
+    final existingColumns = columns.map((row) => row['name']).toSet();
+    if (!existingColumns.contains('last_sync_at')) {
+      await db.execute('ALTER TABLE sync_state ADD COLUMN last_sync_at TEXT');
+    }
+    if (!existingColumns.contains('syncing')) {
+      await db.execute(
+        'ALTER TABLE sync_state ADD COLUMN syncing INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    await db.insert('sync_state', {
+      'id': 1,
+      'pending': 1,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> _addSyncMetadata(DatabaseExecutor db) async {
+    for (final table in _financeTables) {
+      final columns = await db.rawQuery('PRAGMA table_info($table)');
+      final existingColumns = columns.map((row) => row['name']).toSet();
+      if (!existingColumns.contains('updated_at')) {
+        await db.execute(
+          "ALTER TABLE $table ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+        );
+      }
+      if (!existingColumns.contains('sync_id')) {
+        await db.execute('ALTER TABLE $table ADD COLUMN sync_id TEXT');
+      }
+      if (!existingColumns.contains('is_synced')) {
+        await db.execute(
+          'ALTER TABLE $table ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      if (!existingColumns.contains('deleted_at')) {
+        await db.execute('ALTER TABLE $table ADD COLUMN deleted_at TEXT');
+      }
+      await db.execute(
+        "UPDATE $table SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE updated_at = ''",
+      );
+      final identityField = switch (table) {
+        'settings' => 'key',
+        'categories' => "name || '|' || scope",
+        'services' => 'name',
+        _ => 'id',
+      };
+      await db.execute(
+        "UPDATE $table SET sync_id = 'legacy-$table-' || $identityField WHERE sync_id IS NULL OR sync_id = ''",
+      );
+      await db.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS sync_${table}_sync_id_idx ON $table(sync_id)',
+      );
+      if (table == 'card_expenses') {
+        if (!existingColumns.contains('card_sync_id')) {
+          await db.execute(
+            'ALTER TABLE card_expenses ADD COLUMN card_sync_id TEXT',
+          );
+        }
+        await db.execute('''UPDATE card_expenses
+          SET card_sync_id = (
+            SELECT sync_id FROM cards WHERE cards.id = card_expenses.card_id
+          )
+          WHERE card_sync_id IS NULL OR length(card_sync_id) = 0''');
+      }
+    }
+  }
+
+  static const _financeTables = [
+    'expenses',
+    'incomes',
+    'services',
+    'categories',
+    'cards',
+    'card_expenses',
+    'goals',
+    'settings',
+    'investments',
+  ];
+
+  Future<void> _installSyncTriggers(DatabaseExecutor db) async {
+    for (final table in _financeTables) {
+      final keyField = table == 'settings' ? 'key' : 'id';
+      final cardSyncAssignment = table == 'card_expenses'
+          ? ', card_sync_id = (SELECT sync_id FROM cards WHERE cards.id = NEW.card_id)'
+          : '';
+      await db.execute('DROP TRIGGER IF EXISTS sync_${table}_insert');
+      await db.execute('DROP TRIGGER IF EXISTS sync_${table}_update');
+      await db.execute('DROP TRIGGER IF EXISTS sync_${table}_delete');
+      await db.execute('''CREATE TRIGGER sync_${table}_insert
+        AFTER INSERT ON $table
+        WHEN (SELECT syncing FROM sync_state WHERE id = 1) = 0
+        BEGIN
+          UPDATE $table
+            SET sync_id = COALESCE(NULLIF(sync_id, ''), lower(hex(randomblob(16)))),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+                is_synced = 0$cardSyncAssignment
+            WHERE $keyField = NEW.$keyField;
+          UPDATE sync_state SET pending = 1 WHERE id = 1;
+        END''');
+      await db.execute('''CREATE TRIGGER sync_${table}_update
+        AFTER UPDATE ON $table
+        WHEN (SELECT syncing FROM sync_state WHERE id = 1) = 0
+          AND NEW.updated_at = OLD.updated_at
+          AND NEW.is_synced = OLD.is_synced
+        BEGIN
+          UPDATE $table
+            SET sync_id = COALESCE(NULLIF(sync_id, ''), lower(hex(randomblob(16)))),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+                is_synced = 0$cardSyncAssignment
+            WHERE $keyField = NEW.$keyField;
+          UPDATE sync_state SET pending = 1 WHERE id = 1;
+        END''');
+    }
+  }
+
+  Future<Map<String, Object?>?> syncState() async {
+    final rows = await (await database).query('sync_state', where: 'id = 1');
+    return rows.isEmpty ? null : rows.single;
+  }
+
+  Future<void> saveSyncState({
+    required String userId,
+    required String baselineJson,
+    required String syncedAt,
+  }) async {
+    await (await database).update('sync_state', {
+      'user_id': userId,
+      'baseline_json': baselineJson,
+      'last_synced_at': syncedAt,
+      'last_sync_at': syncedAt,
+      'pending': 0,
+    }, where: 'id = 1');
+  }
+
+  Future<Map<String, List<Map<String, Object?>>>> unsyncedRows() async {
+    final db = await database;
+    return {
+      for (final table in _financeTables)
+        table: await db.query(table, where: 'is_synced = 0'),
+    };
+  }
+
+  Future<void> markSynced(Map<String, List<Map<String, Object?>>> rows) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final entry in rows.entries) {
+        final keyField = entry.key == 'settings' ? 'key' : 'id';
+        for (final row in entry.value) {
+          final key = row[keyField];
+          final updatedAt = row['updated_at'];
+          if (key == null || updatedAt == null) continue;
+          final current = await txn.query(
+            entry.key,
+            where: '$keyField = ? AND is_synced = 0',
+            whereArgs: [key],
+          );
+          if (current.isEmpty ||
+              _encodeRows(current, keyField) != _encodeRows([row], keyField)) {
+            continue;
+          }
+          await txn.update(
+            entry.key,
+            {'is_synced': 1},
+            where: '$keyField = ? AND updated_at = ? AND is_synced = 0',
+            whereArgs: [key, updatedAt],
+          );
+        }
+      }
+    });
+  }
+
+  Future<void> markSyncPending() async =>
+      (await database).update('sync_state', {'pending': 1}, where: 'id = 1');
 
   Future<void> _seedCategories(DatabaseExecutor db) async {
     for (final name in [
@@ -294,7 +488,9 @@ class AppDatabase {
     String? orderBy,
   }) async => (await database).query(
     table,
-    where: where,
+    where: where == null
+        ? 'deleted_at IS NULL'
+        : '($where) AND deleted_at IS NULL',
     whereArgs: args,
     orderBy: orderBy,
   );
@@ -302,17 +498,57 @@ class AppDatabase {
       (await database).insert(table, values);
   Future<int> update(String table, Map<String, Object?> values, int id) async =>
       (await database).update(table, values, where: 'id = ?', whereArgs: [id]);
-  Future<int> remove(String table, int id) async =>
-      (await database).delete(table, where: 'id = ?', whereArgs: [id]);
-  Future<void> setting(String key, String value) async =>
-      (await database).insert('settings', {
-        'key': key,
-        'value': value,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+  Future<void> saveService(String name, int unitCents) async {
+    final db = await database;
+    final updated = await db.update(
+      'services',
+      {'unit_cents': unitCents, 'deleted_at': null},
+      where: 'name = ?',
+      whereArgs: [name],
+    );
+    if (updated == 0) {
+      await db.insert('services', {'name': name, 'unit_cents': unitCents});
+    }
+  }
+
+  Future<int> remove(String table, int id) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final deletedAt = DateTime.now().toUtc().toIso8601String();
+      if (table == 'cards') {
+        await txn.update(
+          'card_expenses',
+          {'deleted_at': deletedAt},
+          where: 'card_id = ? AND deleted_at IS NULL',
+          whereArgs: [id],
+        );
+      }
+      return txn.update(
+        table,
+        {'deleted_at': deletedAt},
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
+      );
+    });
+  }
+
+  Future<void> setting(String key, String value) async {
+    final db = await database;
+    final updated = await db.update(
+      'settings',
+      {'value': value, 'deleted_at': null},
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    if (updated == 0) {
+      await db.insert('settings', {'key': key, 'value': value});
+    }
+  }
+
   Future<String> getSetting(String key, [String fallback = '0']) async {
     final result = await (await database).query(
       'settings',
-      where: 'key = ?',
+      where: 'key = ? AND deleted_at IS NULL',
       whereArgs: [key],
     );
     return result.isEmpty ? fallback : result.first['value'] as String;
@@ -332,14 +568,40 @@ class AppDatabase {
       'settings',
       'investments',
     ]) {
-      data[table] = await db.query(table);
+      data[table] = await db.query(
+        table,
+        orderBy: table == 'settings' ? 'key' : 'id',
+      );
     }
     return data;
   }
 
-  Future<void> restoreAll(Map<String, dynamic> data) async {
+  Future<bool> restoreAll(
+    Map<String, dynamic> data, {
+    bool markSynced = false,
+    Map<String, List<Map<String, Object?>>>? expectedLocal,
+  }) async {
     final db = await database;
-    await db.transaction((txn) async {
+    return db.transaction((txn) async {
+      if (expectedLocal != null) {
+        for (final table in _financeTables) {
+          final keyField = table == 'settings' ? 'key' : 'id';
+          final current = await txn.query(table, orderBy: keyField);
+          final expected =
+              <Map<String, Object?>>[
+                ...(expectedLocal[table] ?? const <Map<String, Object?>>[]),
+              ]..sort(
+                (a, b) => (a[keyField] ?? '').toString().compareTo(
+                  (b[keyField] ?? '').toString(),
+                ),
+              );
+          if (_encodeRows(current, keyField) !=
+              _encodeRows(expected, keyField)) {
+            return false;
+          }
+        }
+      }
+      await txn.update('sync_state', {'syncing': 1}, where: 'id = 1');
       const tables = [
         'card_expenses',
         'expenses',
@@ -354,6 +616,8 @@ class AppDatabase {
       for (final table in tables) {
         await txn.delete(table);
       }
+      final cardIdBySyncId = <String, int>{};
+      final cardIdByOldId = <String, int>{};
       for (final table in [
         'expenses',
         'incomes',
@@ -374,6 +638,7 @@ class AppDatabase {
               7,
             );
           }
+          if (table == 'categories') row.putIfAbsent('scope', () => 'planning');
           if (table == 'card_expenses') row.putIfAbsent('paid', () => 0);
           if (table == 'card_expenses') {
             if (row['purchase_id'] == null) {
@@ -381,9 +646,52 @@ class AppDatabase {
             }
           }
           if (table == 'expenses') row.putIfAbsent('due_date', () => null);
-          if (table == 'categories') row.putIfAbsent('scope', () => 'planning');
           if (table == 'incomes') row.putIfAbsent('investment_ids', () => '*');
-          await txn.insert(table, row);
+          final oldId = row['id'];
+          final syncId = row['sync_id']?.toString();
+          final identity = switch (table) {
+            'settings' => row['key'],
+            'categories' => '${row['name'] ?? ''}|${row['scope'] ?? ''}',
+            'services' => row['name'],
+            _ => oldId,
+          };
+          row['sync_id'] =
+              syncId ??
+              'legacy-$table-${identity ?? DateTime.now().microsecondsSinceEpoch}';
+          if (table == 'card_expenses') {
+            final cardSyncId = row['card_sync_id']?.toString();
+            final remappedCardId =
+                cardIdBySyncId[cardSyncId] ??
+                cardIdByOldId[row['card_id']?.toString()];
+            if (remappedCardId == null) {
+              throw StateError(
+                'Não foi possível associar uma parcela ao cartão durante a restauração.',
+              );
+            }
+            row['card_id'] = remappedCardId;
+            row['card_sync_id'] =
+                cardSyncId ??
+                cardIdBySyncId.entries
+                    .where((entry) => entry.value == remappedCardId)
+                    .map((entry) => entry.key)
+                    .first;
+          }
+          row.putIfAbsent(
+            'updated_at',
+            () => DateTime.now().toUtc().toIso8601String(),
+          );
+          row['is_synced'] = markSynced
+              ? 1
+              : (row['is_synced'] == true ? 1 : row['is_synced'] ?? 0);
+          row.putIfAbsent('deleted_at', () => null);
+          if (table != 'settings') row.remove('id');
+          final restoredId = await txn.insert(table, row);
+          if (table == 'cards') {
+            cardIdBySyncId[row['sync_id'].toString()] = restoredId;
+            if (oldId != null) {
+              cardIdByOldId.putIfAbsent(oldId.toString(), () => restoredId);
+            }
+          }
         }
       }
       await _groupLegacyPurchases(txn);
@@ -395,6 +703,21 @@ class AppDatabase {
       if (categoryCount == 0) {
         await _seedCategories(txn);
       }
+      await txn.update('sync_state', {'syncing': 0}, where: 'id = 1');
+      return true;
     });
+  }
+
+  String _encodeRows(List<Map<String, Object?>> rows, String keyField) {
+    final sortedRows =
+        rows.map((row) {
+          final keys = row.keys.toList()..sort();
+          return {for (final key in keys) key: row[key]};
+        }).toList()..sort(
+          (a, b) => (a[keyField] ?? '').toString().compareTo(
+            (b[keyField] ?? '').toString(),
+          ),
+        );
+    return sortedRows.toString();
   }
 }

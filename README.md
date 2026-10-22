@@ -1,6 +1,6 @@
 ﻿# MedPlanner
 
-Aplicativo Flutter para planejamento financeiro pessoal, com armazenamento local em SQLite e funcionamento totalmente offline.
+Aplicativo Flutter para planejamento financeiro de profissionais PJ. Os dados ficam em SQLite no aparelho para o app funcionar offline e são sincronizados com a conta Supabase quando existe conexão.
 
 ## Visão geral
 
@@ -40,12 +40,15 @@ O MedPlanner foi criado para ajudar no controle de finanças pessoais com foco e
 ### Exportação e backup
 - Exportação em Excel
 - Backup e restauração em JSON
-- Operação local, sem integração bancária ou dependência de internet
+- Sincronização offline-first do snapshot JSON privado por usuário no Supabase
+- Operação offline: alterações ficam locais e entram na sincronização quando houver conexão
 
 ## Tecnologias
 
 - Flutter
+- Riverpod e Command pattern
 - SQLite
+- Supabase Auth e sincronização JSON
 - Notificações locais
 - Excel
 - Share Plus
@@ -100,12 +103,20 @@ puro --env=stable flutter run
 
 ## Dados e privacidade
 
-- O aplicativo não faz chamadas de rede
+- As telas financeiras leem e gravam primeiro no SQLite local
+- Cada registro local mantém um `sync_id` estável, `updated_at`, `is_synced` e `deleted_at`; exclusões são lógicas para poderem ser propagadas a outros aparelhos
+- Com uma sessão Supabase, o app verifica a conectividade, envia alterações pendentes e consulta o `updated_at` remoto ao entrar, voltar ao primeiro plano, recuperar a conexão, receber alterações em tempo real ou usar **Sincronizar agora**
+- O app baixa o snapshot JSON somente quando a nuvem mudou desde `last_sync_at` (ou quando a sincronização é forçada), aplica a reconciliação em transação e só confirma o estado após a operação remota concluir
+- `finance_backups` continua sendo um snapshot JSON compartilhado com o site: a verificação de novidade é incremental, mas o payload ainda é transferido por inteiro, não como delta de linhas
+- O site independente `medplanner-web` lê e grava o mesmo snapshot para apresentar Início, Entradas e Cálculos
+- Se dois aparelhos offline editarem o mesmo registro, o sincronizador mantém a alteração local da cópia que sincroniza; registros distintos são combinados por ID
+- O site deve preservar `sync_id`/`card_sync_id` ao salvar e ignorar registros com `deleted_at` preenchido para refletir exclusões lógicas
 - Não há integração bancária
-- Os dados ficam armazenados localmente em SQLite no dispositivo
+- O primeiro envio associa os dados locais atuais à conta que estiver autenticada
+- Após uma sincronização, o aparelho fica vinculado àquela conta; a tela financeira é bloqueada se outra conta entrar no mesmo aparelho, para impedir que os dados locais sejam misturados entre usuários
 - Os lembretes de vencimento são notificações locais; o sistema pode solicitar permissão para exibi-las
 - Backup JSON e exportação em planilha são feitos via compartilhamento do sistema
-- A restauração substitui os dados locais atuais
+- A tabela `finance_backups` precisa existir no projeto Supabase para sincronizar
 
 > Atenção: o protótipo ainda não cifra o arquivo SQLite. Para uso com dados financeiros sensíveis em produção, a próxima etapa sugerida é adicionar criptografia do banco e proteção por biometria/PIN.
 

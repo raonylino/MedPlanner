@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/config/supabase_config.dart';
+
 class AuthViewModel {
   const AuthViewModel(this._client);
 
@@ -13,6 +15,12 @@ class AuthViewModel {
   }
 
   Future<void> signOut() => _client.auth.signOut();
+
+  Future<void> sendPasswordRecovery(String email) =>
+      _client.auth.resetPasswordForEmail(
+        email.trim(),
+        redirectTo: SupabaseConfig.passwordRecoveryRedirectUrl,
+      );
 
   Future<bool> signUp({
     required String email,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:sqflite/sqflite.dart';
 
 import '../core/database/app_database.dart';
@@ -11,11 +13,18 @@ abstract interface class FinanceCommand<T> {
 
 /// Runs commands with the app's persistence and notification dependencies.
 class FinanceCommands {
-  FinanceCommands(this.db, this.notifications);
+  FinanceCommands(this.db, this.notifications, {this.afterLocalWrite});
   final AppDatabase db;
   final ExpenseNotificationService notifications;
+  final Future<void> Function()? afterLocalWrite;
 
-  Future<T> run<T>(FinanceCommand<T> command) => command.execute(this);
+  Future<T> run<T>(FinanceCommand<T> command) async {
+    final result = await command.execute(this);
+    if (command is! ExportDatabaseCommand && afterLocalWrite != null) {
+      unawaited(afterLocalWrite!());
+    }
+    return result;
+  }
 
   Future<bool> _addExpense(AddExpenseCommand command) async {
     final start =
@@ -80,11 +89,7 @@ class FinanceCommands {
   }
 
   Future<void> _addIncome(AddIncomeCommand command) async {
-    final database = await db.database;
-    await database.insert('services', {
-      'name': command.service,
-      'unit_cents': command.unitCents,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.saveService(command.service, command.unitCents);
     await db.add('incomes', {
       'service': command.service,
       'quantity': command.quantity,
@@ -98,11 +103,7 @@ class FinanceCommands {
   }
 
   Future<void> _updateIncome(UpdateIncomeCommand command) async {
-    final database = await db.database;
-    await database.insert('services', {
-      'name': command.service,
-      'unit_cents': command.unitCents,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.saveService(command.service, command.unitCents);
     await db.update('incomes', {
       'service': command.service,
       'quantity': command.quantity,
@@ -218,8 +219,8 @@ class FinanceCommands {
     final remainder = recurring ? 0 : command.totalCents % count;
     final existingCount = purchase.fold<int>(
       0,
-      (maxCount, installment) => maxCount >
-              FinanceValues.integer(installment['installment_count'])
+      (maxCount, installment) =>
+          maxCount > FinanceValues.integer(installment['installment_count'])
           ? maxCount
           : FinanceValues.integer(installment['installment_count']),
     );
@@ -281,9 +282,10 @@ class FinanceCommands {
 
       for (final installment in purchase) {
         if (FinanceValues.integer(installment['installment_index']) > count) {
-          await transaction.delete(
+          await transaction.update(
             'card_expenses',
-            where: 'id = ?',
+            {'deleted_at': DateTime.now().toUtc().toIso8601String()},
+            where: 'id = ? AND deleted_at IS NULL',
             whereArgs: [installment['id']],
           );
         }
@@ -488,14 +490,15 @@ class DeleteCardPurchaseCommand implements FinanceCommand<void> {
   DeleteCardPurchaseCommand(this.purchaseId);
   final String purchaseId;
   @override
-  Future<void> execute(FinanceCommands commands) async =>
-      (await commands.db.database)
-          .delete(
-            'card_expenses',
-            where: 'purchase_id = ?',
-            whereArgs: [purchaseId],
-          )
-          .then((_) {});
+  Future<void> execute(FinanceCommands commands) async {
+    final db = await commands.db.database;
+    await db.update(
+      'card_expenses',
+      {'deleted_at': DateTime.now().toUtc().toIso8601String()},
+      where: 'purchase_id = ? AND deleted_at IS NULL',
+      whereArgs: [purchaseId],
+    );
+  }
 }
 
 class DeleteRecordCommand implements FinanceCommand<void> {

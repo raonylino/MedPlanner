@@ -7,6 +7,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/ui.dart';
 import 'avatar_picker.dart';
+import 'password_strength.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -39,6 +40,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    final creatingAccount = _creatingAccount;
     setState(() {
       _busy = true;
     });
@@ -75,7 +77,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (mounted) {
         showFloatingNotice(
           context,
-          _friendlyError(error),
+          _friendlyError(error, creatingAccount: creatingAccount),
           type: FloatingSnackBarType.error,
         );
       }
@@ -84,16 +86,70 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
-  String _friendlyError(Object error) {
+  Future<void> _sendPasswordRecovery() async {
+    final email = await showDialog<String>(
+      context: context,
+      builder: (_) => _PasswordRecoveryRequestDialog(
+        initialEmail: _email.text.trim(),
+      ),
+    );
+    if (email == null || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(authViewModelProvider).sendPasswordRecovery(email);
+      if (mounted) {
+        showFloatingNotice(
+          context,
+          'Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.',
+          type: FloatingSnackBarType.success,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        final message = _isConnectivityError(error)
+            ? 'Sem conexão. Verifique sua internet e tente novamente.'
+            : 'Não foi possível enviar o e-mail de recuperação. Tente novamente.';
+        showFloatingNotice(
+          context,
+          message,
+          type: FloatingSnackBarType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  bool _isConnectivityError(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('socketexception') ||
+        text.contains('failed host lookup') ||
+        text.contains('timed out') ||
+        text.contains('network is unreachable') ||
+        text.contains('connection refused');
+  }
+
+  String _friendlyError(Object error, {required bool creatingAccount}) {
     final text = error is AuthException ? error.message : error.toString();
-    if (text.toLowerCase().contains('invalid login credentials')) {
+    final normalized = text.toLowerCase();
+    if (_isConnectivityError(error)) {
+      return 'Sem conexão. Verifique sua internet e tente novamente.';
+    }
+    if (normalized.contains('invalid login credentials') ||
+        normalized.contains('invalid credentials') ||
+        normalized.contains('invalid_grant')) {
       return 'E-mail ou senha incorretos.';
     }
-    if (text.toLowerCase().contains('already registered')) {
+    if (normalized.contains('already registered')) {
       return 'Este e-mail já tem uma conta. Entre com sua senha.';
     }
-    if (text.toLowerCase().contains('password')) {
-      return 'A senha precisa ter pelo menos 6 caracteres.';
+    if ((creatingAccount || _creatingAccount) &&
+        (normalized.contains('password') || normalized.contains('weak_password'))) {
+      return 'A senha precisa ter pelo menos 8 caracteres e atingir o nível médio.';
+    }
+    if (!creatingAccount && error is AuthException) {
+      return 'E-mail ou senha incorretos.';
     }
     return text;
   }
@@ -329,14 +385,33 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   ),
                                 ),
                               ),
-                              validator: (value) => value == null ||
-                                      value.length < 6
-                                  ? 'Use pelo menos 6 caracteres.'
-                                  : null,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Informe sua senha.';
+                                }
+                                if (_creatingAccount &&
+                                    !PasswordPolicy.isAcceptable(value)) {
+                                  return 'Use 8 caracteres ou mais e combine tipos diferentes de caracteres.';
+                                }
+                                return null;
+                              },
+                              onChanged: (_) {
+                                if (_creatingAccount) setState(() {});
+                              },
                               onFieldSubmitted: (_) {
                                 if (!_busy && !_creatingAccount) _submit();
                               },
                             ),
+                            if (_creatingAccount)
+                              PasswordStrengthIndicator(password: _password.text),
+                            if (!_creatingAccount)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: _busy ? null : _sendPasswordRecovery,
+                                  child: const Text('Esqueci minha senha'),
+                                ),
+                              ),
                             if (_creatingAccount) ...[
                               const SizedBox(height: 12),
                               TextFormField(
@@ -432,4 +507,70 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ),
     );
   }
+}
+
+
+class _PasswordRecoveryRequestDialog extends StatefulWidget {
+  const _PasswordRecoveryRequestDialog({required this.initialEmail});
+
+  final String initialEmail;
+
+  @override
+  State<_PasswordRecoveryRequestDialog> createState() =>
+      _PasswordRecoveryRequestDialogState();
+}
+
+class _PasswordRecoveryRequestDialogState
+    extends State<_PasswordRecoveryRequestDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _emailController;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    backgroundColor: AppTheme.surface,
+    scrollable: true,
+    title: const Text('Recuperar senha'),
+    content: Form(
+      key: _formKey,
+      child: TextFormField(
+        controller: _emailController,
+        keyboardType: TextInputType.emailAddress,
+        autocorrect: false,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: 'E-mail da sua conta',
+          prefixIcon: Icon(Icons.email_outlined),
+        ),
+        validator: (value) => value == null || !value.trim().contains('@')
+            ? 'Informe um e-mail válido.'
+            : null,
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancelar'),
+      ),
+      FilledButton(
+        onPressed: () {
+          if (_formKey.currentState!.validate()) {
+            Navigator.pop(context, _emailController.text.trim());
+          }
+        },
+        child: const Text('Enviar link'),
+      ),
+    ],
+  );
 }

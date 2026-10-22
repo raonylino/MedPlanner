@@ -2,6 +2,7 @@
 /// clients; table access is restricted by the database's RLS policies.
 abstract final class SupabaseConfig {
   static const url = 'https://pplkkjoiylrnyltilumk.supabase.co';
+  static const passwordRecoveryRedirectUrl = 'medplanner://reset-password';
   static const publishableKey =
       'sb_publishable_T5Oj3vuOFW0BP9ghZ3MXQw_vISXeg0i';
 }

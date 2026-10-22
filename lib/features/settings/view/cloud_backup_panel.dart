@@ -81,6 +81,21 @@ class _CloudBackupPanelState extends ConsumerState<CloudBackupPanel> {
     }
   }
 
+  Future<void> _syncNow() async {
+    setState(() => _busy = true);
+    final sync = ref.read(autoSyncServiceProvider);
+    final synced = await sync.synchronize(forceRemoteCheck: true);
+    if (mounted) {
+      _notice(
+        synced
+            ? 'Dados sincronizados com sua conta.'
+            : sync.lastError ??
+                  'Não foi possível sincronizar agora. Seus dados continuam salvos neste aparelho.',
+      );
+      setState(() => _busy = false);
+    }
+  }
+
   Future<void> _download(CloudBackupViewModel cloud) async {
     if (!await _confirm(
       title: 'Restaurar backup da nuvem?',
@@ -122,11 +137,24 @@ class _CloudBackupPanelState extends ConsumerState<CloudBackupPanel> {
           child: ListTile(
             leading: Icon(Icons.cloud_outlined, color: AppTheme.lime),
             title: Text(user?.email ?? 'Conta autenticada'),
-            subtitle: const Text('Backup JSON na sua conta Supabase'),
+            subtitle: const Text('Sincronização automática e backup JSON'),
           ),
         ),
         const SizedBox(height: 8),
         if (user != null) ...[
+          Card(
+            child: ListTile(
+              enabled: !_busy,
+              leading: Icon(Icons.sync, color: AppTheme.lime),
+              title: const Text('Sincronização automática'),
+              subtitle: const Text(
+                'As alterações são enviadas quando há internet. Você também pode sincronizar agora.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _busy ? null : _syncNow,
+            ),
+          ),
+          const SizedBox(height: 8),
           Card(
             child: ListTile(
               enabled: !_busy,

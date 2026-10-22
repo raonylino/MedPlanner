@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:circle_nav_bar/circle_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -8,6 +10,7 @@ import 'core/config/supabase_config.dart';
 import 'core/providers/app_providers.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/view/login_page.dart';
+import 'features/auth/view/password_recovery_page.dart';
 import 'features/cards/view/cards_page.dart';
 import 'features/cards/viewmodel/cards_view_model.dart';
 import 'features/dashboard/view/dashboard_page.dart';
@@ -49,19 +52,132 @@ class FinanceApp extends ConsumerWidget {
   }
 }
 
-class AppEntryGate extends ConsumerWidget {
+class AppEntryGate extends ConsumerStatefulWidget {
   const AppEntryGate({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppEntryGate> createState() => _AppEntryGateState();
+}
+
+class _AppEntryGateState extends ConsumerState<AppEntryGate> {
+  bool _passwordRecoveryFlow = false;
+  String? _bindingUserId;
+  Future<Map<String, Object?>?>? _bindingFuture;
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(supabaseAuthStateProvider, (previous, next) {
+      if (next.asData?.value.session != null) {
+        unawaited(ref.read(autoSyncServiceProvider).watchCurrentUser());
+      } else if (next.asData != null) {
+        unawaited(ref.read(autoSyncServiceProvider).stopWatching());
+      }
+      final event = next.asData?.value.event;
+      if (event == AuthChangeEvent.passwordRecovery && !_passwordRecoveryFlow) {
+        setState(() => _passwordRecoveryFlow = true);
+      } else if (event == AuthChangeEvent.signedOut && _passwordRecoveryFlow) {
+        setState(() => _passwordRecoveryFlow = false);
+      }
+    });
+
     final authState = ref.watch(supabaseAuthStateProvider);
+    final event = authState.asData?.value.event;
+    if (event == AuthChangeEvent.passwordRecovery) {
+      _passwordRecoveryFlow = true;
+    }
+    if (_passwordRecoveryFlow) return const PasswordRecoveryPage();
+
     final session =
         authState.asData?.value.session ??
         ref.read(supabaseClientProvider).auth.currentSession;
-    if (session != null) return const FinanceShell();
+    if (session != null) {
+      if (_bindingUserId != session.user.id) {
+        _bindingUserId = session.user.id;
+        _bindingFuture = ref.read(appDatabaseProvider).syncState();
+      }
+      return FutureBuilder<Map<String, Object?>?>(
+        future: _bindingFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const MedPlannerSplash();
+          }
+          final boundUser = snapshot.data?['user_id']?.toString();
+          if (snapshot.hasError) {
+            return _LocalAccountMismatch(
+              email: session.user.email ?? '',
+              reason:
+                  'Não foi possível verificar a conta associada a este aparelho. Saia e tente novamente.',
+              onSignOut: () => ref.read(authViewModelProvider).signOut(),
+            );
+          }
+          if (boundUser != null && boundUser != session.user.id) {
+            return _LocalAccountMismatch(
+              email: session.user.email ?? '',
+              reason:
+                  'Os dados locais pertencem à conta sincronizada anteriormente. Entre na conta original para continuar.',
+              onSignOut: () => ref.read(authViewModelProvider).signOut(),
+            );
+          }
+          return const FinanceShell();
+        },
+      );
+    }
     if (authState.isLoading) return const MedPlannerSplash();
     return const LoginPage();
   }
+}
+
+class _LocalAccountMismatch extends StatelessWidget {
+  const _LocalAccountMismatch({
+    required this.email,
+    required this.reason,
+    required this.onSignOut,
+  });
+  final String email;
+  final String reason;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppTheme.bg,
+    body: SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline, size: 42, color: AppTheme.lime),
+                const SizedBox(height: 18),
+                const Text(
+                  'Este aparelho não pode usar esta conta',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '$reason\n\nConta atual: $email',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.muted, height: 1.5),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onSignOut,
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Sair desta conta'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class MedPlannerSplash extends StatelessWidget {
@@ -101,7 +217,8 @@ class FinanceShell extends ConsumerStatefulWidget {
   ConsumerState<FinanceShell> createState() => _FinanceShellState();
 }
 
-class _FinanceShellState extends ConsumerState<FinanceShell> {
+class _FinanceShellState extends ConsumerState<FinanceShell>
+    with WidgetsBindingObserver {
   int selected = 2;
   bool _tourCheckStarted = false;
   static const titles = [
@@ -115,7 +232,21 @@ class _FinanceShellState extends ConsumerState<FinanceShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowTour());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ref.read(autoSyncServiceProvider).synchronize());
+    }
   }
 
   Future<void> _maybeShowTour() async {
